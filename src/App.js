@@ -1,15 +1,16 @@
-import logo from './logo.svg';
-import './App.css';
-import RouteMap from './RouteMap';
-import BusTracker from './RecenterMap';
+// App.js
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import RouteMap from "./RouteMap";
+import DriverTrip from "./DriverTrip";
 
 function App() {
   return (
-    <>
-   {/*<RouteMap/>*/}
-   <BusTracker/>
-   </>
+    <Router>
+      <Routes>
+        <Route path="/" element={<RouteMap />} />
+        <Route path="/driver" element={<DriverTrip />} />
+      </Routes>
+    </Router>
   );
 }
-
 export default App;
