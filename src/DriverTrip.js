@@ -69,7 +69,7 @@ const DriverTrip = () => {
   };
 
   //test bus move 
-  let fakeLat = 30.0548745;
+  /*let fakeLat = 30.0548745;
   let fakeLng = 31.3441448;
 
   const emitLocation = () => {
@@ -101,15 +101,18 @@ const DriverTrip = () => {
       console.log("failed to emit locationUpdate event ");
 
     }
-  };
-  /*const emitLocation = () => {
+  };*/
+  const emitLocation = () => {
+       try {
     navigator.geolocation.getCurrentPosition(({ coords }) => {
-      console.log({
-       routeId:selectedRoute,
-        busId,
-        lat: coords.latitude,
-        lng: coords.longitude,
-      });
+  
+      const point = { lat: coords.latitude, lng: coords.longitude, timestamp: new Date().toISOString() };
+      const key = `${busId}-${selectedRoute}-${tripId}`;
+
+      // 🧠 Store point in localStorage
+      const existing = JSON.parse(localStorage.getItem(key)) || [];
+      existing.push(point);
+      localStorage.setItem(key, JSON.stringify(existing));
       
       socket.emit("locationUpdate", {
         tripId:tripId,
@@ -119,7 +122,12 @@ const DriverTrip = () => {
         lng: coords.longitude,
       });
     });
-  };*/
+  }
+     catch (e) {
+      console.log("failed to emit locationUpdate event ");
+
+    }
+  };
 
   useEffect(() => {
     if (tripStarted && tripId) {
