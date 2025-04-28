@@ -315,7 +315,7 @@ import {
   
           {trips.length > 0 && (
     <>
-      <label>Select Completed Trip: </label>
+      <label>Select Trip: </label>
       <select
         onChange={(e) => setSelectedTripId(e.target.value)}
         defaultValue=""
