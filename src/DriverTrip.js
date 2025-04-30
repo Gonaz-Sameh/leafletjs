@@ -103,6 +103,56 @@ const DriverTrip = () => {
             const point = { lat: latitude, lng: longitude, timestamp };
 
             setCoordinates((prev) => {
+              // FIRST COORDINATE: Store but don't emit yet
+              if (prev.length === 0) {
+                return [point];
+              }
+
+              // SECOND COORDINATE: Validate against first
+              if (prev.length === 1) {
+                const distance = haversineDistance(
+                  prev[0].lat,
+                  prev[0].lng,
+                  point.lat,
+                  point.lng
+                );
+
+                // Good start (<10m apart) - keep both
+                if (distance < 10) {
+                  const updated = [...prev, point];
+                  // Now emit both
+                  socket.emit("locationUpdate", {
+                    tripId,
+                    routeId: selectedRoute,
+                    busId,
+                    lat: prev[0].lat,
+                    lng: prev[0].lng,
+                  });
+                  socket.emit("locationUpdate", {
+                    tripId,
+                    routeId: selectedRoute,
+                    busId,
+                    lat: point.lat,
+                    lng: point.lng,
+                  });
+                  return updated;
+                }
+                // Bad start (≥10m apart) - discard first, use second
+                else {
+                  console.log("Discarded inaccurate first coordinate");
+                  // Only emit the second coordinate
+                  socket.emit("locationUpdate", {
+                    tripId,
+                    routeId: selectedRoute,
+                    busId,
+                    lat: point.lat,
+                    lng: point.lng,
+                  });
+                  return [point]; // Second coordinate becomes the first
+                }
+              }
+
+              // NORMAL OPERATION (after first two points)
               const updated = [...prev];
               const lastPoint = updated[updated.length - 1];
 
@@ -113,7 +163,7 @@ const DriverTrip = () => {
                   lastPoint.lng.toFixed(5) === point.lng.toFixed(5);
                 if (isSameLocation) {
                   console.log("Ignored redundant location");
-                  return updated; // Skip redundant point
+                  return updated;
                 }
 
                 // Out of range check (>300m sudden jump)
@@ -125,7 +175,7 @@ const DriverTrip = () => {
                 );
                 if (distance > 300) {
                   console.warn("Ignored jumpy location, distance:", distance);
-                  return updated; // Skip GPS glitch
+                  return updated;
                 }
               }
 
@@ -141,13 +191,13 @@ const DriverTrip = () => {
                 saveCounterRef.current = 0;
               }
 
-              // Emit only after validation
+              // Emit new position
               socket.emit("locationUpdate", {
                 tripId,
                 routeId: selectedRoute,
                 busId,
-                lat: latitude,
-                lng: longitude,
+                lat: point.lat,
+                lng: point.lng,
               });
 
               return updated;
