@@ -122,6 +122,12 @@ const RouteMap = () => {
   const [tripLatestLiveCoordinates, setTripLatestLiveCoordinates] = useState([]);
   const [disabledDuringDrow, setDisabledDuringDrow] = useState(false);
 
+
+    const [trafficInfo, setTrafficInfo] = useState(null);
+    const [isLoadingTraffic, setIsLoadingTraffic] = useState(false);
+    const [error, setError] = useState(null);
+
+
   // Reset `shouldFitBounds` after fitting is complete
   const handleFitBoundsComplete = () => {
     setShouldFitBounds(false);
@@ -332,7 +338,60 @@ const RouteMap = () => {
     setDisabledDuringDrow(true)
   };
 
-
+  const estimateTravelTime = async () => {
+    if (!selectedRouteId || route.length < 2) return;
+  
+    setIsLoadingTraffic(true);
+    setError(null);
+  
+    try {
+      // 1. Get base route from OpenRouteService
+      const orsResponse = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': '5b3ce3597851110001cf62480f88fa10836b4c6990030f5767fb9d71'
+        },
+        body: JSON.stringify({
+          coordinates: route.map(c => [c[1], c[0]]), // Convert to [lng, lat]
+          instructions: false
+        })
+      });
+      
+      const orsData = await orsResponse.json();
+      const baseDuration = orsData.routes[0].summary.duration; // in seconds
+  
+      // 2. Get traffic data from TomTom
+      const tomTomResponse = await fetch(
+        `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json` +
+        `?key=H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe` +
+        `&point=${route[0][0]},${route[0][1]}` + // Start point
+        `&unit=KMPH`
+      );
+      
+      const tomTomData = await tomTomResponse.json();
+      const currentSpeed = tomTomData.flowSegmentData.currentSpeed;
+      const freeFlowSpeed = tomTomData.flowSegmentData.freeFlowSpeed;
+  
+      // 3. Calculate adjusted time
+      const congestionFactor = freeFlowSpeed / currentSpeed;
+      const adjustedDuration = baseDuration * congestionFactor;
+  
+      setTrafficInfo({
+        baseTime: Math.round(baseDuration / 60), // in minutes
+        adjustedTime: Math.round(adjustedDuration / 60), // in minutes
+        currentSpeed: Math.round(currentSpeed),
+        freeFlowSpeed: Math.round(freeFlowSpeed),
+        congestion: Math.round((1 - (currentSpeed / freeFlowSpeed)) * 100) // %
+      });
+  
+    } catch (err) {
+      setError("Failed to get traffic data. Using base estimation only.");
+      console.error(err);
+    } finally {
+      setIsLoadingTraffic(false);
+    }
+  };
 
   return (
     <>
@@ -364,6 +423,7 @@ const RouteMap = () => {
         </button>
         <br />
         {!disabledDuringDrow && <>
+
           <label>Select Route: </label>
           <select
             onChange={(e) => setSelectedRouteId(e.target.value)}
@@ -398,7 +458,53 @@ const RouteMap = () => {
             disabled={!selectedRouteId}
           >
             📍 Fit Bounds
-          </button></>}
+          </button>   
+          
+          {!disabledDuringDrow && selectedRouteId && (
+  <button 
+    onClick={estimateTravelTime}
+    disabled={isLoadingTraffic}
+    style={{marginLeft: '10px'}}
+  >
+    {isLoadingTraffic ? 'Calculating...' : '🚦 Get Traffic Estimate'}
+  </button>
+)}
+{trafficInfo && (
+  <div style={{
+    padding: '10px',
+    margin: '10px 0',
+    background: '#f8f9fa',
+    borderRadius: '5px',
+    border: '1px solid #ddd'
+  }}>
+    <h4>Traffic Information</h4>
+    <div style={{display: 'flex', justifyContent: 'space-between'}}>
+      <div>
+        <strong>Base Time:</strong> {trafficInfo.baseTime} mins
+        <br />
+        <strong>With Traffic:</strong> {trafficInfo.adjustedTime} mins
+      </div>
+      <div>
+        <strong>Current Speed:</strong> {trafficInfo.currentSpeed} km/h
+        <br />
+        <strong>Free Flow Speed:</strong> {trafficInfo.freeFlowSpeed} km/h
+      </div>
+      <div>
+        <strong>Congestion:</strong> {trafficInfo.congestion}%
+        <br />
+        <strong>Delay:</strong> +{trafficInfo.adjustedTime - trafficInfo.baseTime} mins
+      </div>
+    </div>
+  </div>
+)}
+
+{error && (
+  <div style={{color: 'red', padding: '10px'}}>
+    {error}
+  </div>
+)}          
+          
+          </>}
       </div>
 
       <MapContainer
