@@ -1,7 +1,112 @@
+import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
+import Swal from 'sweetalert2'
+import styled, { keyframes } from 'styled-components';
+import { PulseLoader } from 'react-spinners';
 
 const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
+
+// Styled Components
+const Logo = styled.img`
+  display: block;
+  margin: 0 auto 1rem;
+  max-width: 150px;
+  height: auto;
+`;
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const Container = styled.div`
+  max-width: 500px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  animation: ${fadeIn} 0.5s ease-out;
+`;
+
+const Title = styled.h2`
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  background-color: #f9f9f9;
+  transition: all 0.3s;
+  
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  }
+`;
+
+const Button = styled.button`
+  background: ${props => props.primary ? '#3498db' : '#e74c3c'};
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  
+  &:hover {
+    background: ${props => props.primary ? '#2980b9' : '#c0392b'};
+    transform: translateY(-2px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+  
+  &:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+  }
+`;
+
+const StatusMessage = styled.div`
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  text-align: center;
+  margin: 1rem 0;
+  color: #7f8c8d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+`;
+
+const TripIndicator = styled.div`
+  height: 10px;
+  width: 100%;
+  background: ${props => props.active ? 'linear-gradient(90deg, #2ecc71, #27ae60)' : '#ecf0f1'};
+  border-radius: 5px;
+  margin: 1.5rem 0;
+  transition: all 0.5s;
+`;
+
 
 const DriverTrip = () => {
   const [routes, setRoutes] = useState([]);
@@ -9,7 +114,7 @@ const DriverTrip = () => {
   const [tripStarted, setTripStarted] = useState(false);
   const [tripId, setTripId] = useState(null);
   const [coordinates, setCoordinates] = useState([]);
-
+  const [isLoading, setIsLoading] = useState(false);
   const watchIdRef = useRef(null);
   const saveCounterRef = useRef(0);
 
@@ -19,7 +124,19 @@ const DriverTrip = () => {
   const localStorageKey = tripId
     ? `trip-${busId}-${selectedRoute}-${tripId}`
     : null;
-
+    const showAlert = (status='error',text='Someting Went Wrong.') => {
+      Swal.fire({
+        //title: 'Alert',
+        text: text,
+        icon:status,
+        /*showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, delete it!',
+        position: 'top-end',
+        timer: 1500*/
+      })
+    }
   const haversineDistance = (lat1, lon1, lat2, lon2) => {
     const toRad = (value) => (value * Math.PI) / 180;
     const R = 6371000; // meters
@@ -36,41 +153,50 @@ const DriverTrip = () => {
   };
 
   useEffect(() => {
-    fetch(`${backend_baseurl}/api/v1/routes`)
-      .then((res) => res.json())
-      .then(setRoutes)
-      .catch(console.error);
+    let getRoutes = async()=>{
+      try{
+        const res = await axios.get(`${backend_baseurl}/api/v1/routes`)
+        setRoutes(res.data)
+      }catch(err){
+        console.log(err);
+        //alert("error while getting routes",err )
+        showAlert('error' ,`error while getting routes : ${err}`)
+      }
+    }
+ 
+      getRoutes()
   }, []);
 
   const startTrip = async () => {
-    if (!selectedRoute) return alert("Please select a route.");
+    if (!selectedRoute) return showAlert('warning', 'Please select a route before starting the trip.');
     try {
-      const res = await fetch(`${backend_baseurl}/api/v1/trips/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ busId, routeId: selectedRoute }),
-      });
-      const data = await res.json();
+      const res = await axios.post(`${backend_baseurl}/api/v1/trips/start`,{ busId, routeId: selectedRoute })
+      console.log(res);
+      
+      const data = res.data;
       setTripId(data.tripId);
       setTripStarted(true);
       setCoordinates([]);
       saveCounterRef.current = 0;
+    //  alert("Trip started and data saved.");
+      showAlert('success' ,`Trip started Successfully`)
     } catch (error) {
       console.error("Failed to start trip:", error);
+      //alert(" error while starting a Trip ",error);
+      showAlert('error' ,`error while starting a Trip : ${error}`)
     }
   };
 
   const endTrip = async () => {
     if (!tripId) return;
-
+setIsLoading(true)
     const finalCoordinates = [...coordinates];
 
     try {
-      await fetch(`${backend_baseurl}/api/v1/trips/end`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tripId, coordinates: finalCoordinates }),
-      });
+      await axios.post(`${backend_baseurl}/api/v1/trips/end`,{ tripId , coordinates: finalCoordinates })
+      if (localStorageKey) {
+        localStorage.removeItem(localStorageKey);
+      }
 
       setTripStarted(false);
       setTripId(null);
@@ -82,14 +208,14 @@ const DriverTrip = () => {
         watchIdRef.current = null;
       }
 
-      if (localStorageKey) {
-        localStorage.removeItem(localStorageKey);
-      }
-
-      alert("Trip ended and data saved.");
+      //alert("Trip ended and data saved.");
+      showAlert('success' ,`Trip ended Successfully`)
     } catch (e) {
-      alert("Error ending trip");
-      console.error(e);
+      //alert("Error ending trip");
+       console.log(e);
+      showAlert('error' ,`Error ending trip : ${e}`)
+    } finally{
+      setIsLoading(false)
     }
   };
 
@@ -209,7 +335,8 @@ const DriverTrip = () => {
           { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
         );
       } else {
-        alert("Geolocation is not supported by your browser.");
+        //alert("Geolocation is not supported by your browser.");
+        showAlert('error' ,`Geolocation is not supported by your browser.`)
       }
 
       return () => {
@@ -221,31 +348,56 @@ const DriverTrip = () => {
   }, [tripStarted, tripId]);
 
   return (
-    <div style={{ padding: "20px" }}>
-      <h2>🚍 Driver Trip</h2>
-
-      <select
+    <Container>
+      <Logo src="/logo.png" alt="Company Logo" />
+      <Title>
+        <span role="img" aria-label="bus">🚍</span> DRIVER TRIP APP
+      </Title>
+      
+      <TripIndicator active={tripStarted} />
+      
+      <Select
         onChange={(e) => setSelectedRoute(e.target.value)}
         value={selectedRoute}
+        disabled={tripStarted}
       >
         <option value="" disabled>
-          Select a route
+          Select a Route...
         </option>
         {routes.map((route) => (
           <option key={route._id} value={route._id}>
             {route.name}
           </option>
         ))}
-      </select>
+      </Select>
 
-      <div style={{ marginTop: "10px" }}>
-        {!tripStarted ? (
-          <button onClick={startTrip}>Start Trip v2</button>
-        ) : (
-          <button onClick={endTrip}>End Trip</button>
-        )}
-      </div>
-    </div>
+      {!tripStarted ? (
+        <Button 
+          primary 
+          onClick={startTrip}
+          disabled={!selectedRoute}
+        >
+          Start Trip
+        </Button>
+      ) : isLoading ? (
+        <StatusMessage>
+          <PulseLoader color="#3498db" size={8} />
+          <span>Processing trip completion...</span>
+        </StatusMessage>
+      ) : (
+        <Button onClick={endTrip}>
+          End Current Trip
+        </Button>
+      )}
+      
+      {tripStarted && !isLoading && (
+        <StatusMessage>
+          <span role="img" aria-label="active">🔴</span> 
+          Trip in progress - Tracking location...
+        </StatusMessage>
+      )}
+    </Container>
+
   );
 };
 

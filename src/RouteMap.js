@@ -15,7 +15,7 @@ import { useRef } from "react";
 
 
 
-
+const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 const startIcon = new L.DivIcon({
   html: `
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -136,7 +136,7 @@ const RouteMap = () => {
 
   // 🔴 ADD - Setup socket connection
   useEffect(() => {
-    const socket = io(backend_baseurl);
+
     //alert("dd")
     socket.on("busLocationUpdate", ({ tripId, routeId, busId, lat, lng }) => {
       if (routeId === selectedRouteId && tripId == selectedTripId) {
@@ -153,9 +153,6 @@ const RouteMap = () => {
   useEffect(() => {
     fetch(`${backend_baseurl}/api/v1/routes`, {
       method: 'GET',
-      headers: {
-        'Host': 'localhost', // Bypass ngrok warning
-      },
     })
       .then((res) => res.json())
       .then((data) => setSavedRoutes(data))
@@ -345,6 +342,8 @@ const RouteMap = () => {
     setError(null);
   
     try {
+      console.log(route);
+      
       // 1. Get base route from OpenRouteService
       const orsResponse = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
         method: 'POST',
@@ -495,6 +494,19 @@ const RouteMap = () => {
         <strong>Delay:</strong> +{trafficInfo.adjustedTime - trafficInfo.baseTime} mins
       </div>
     </div>
+    
+    {trafficInfo.incidents?.length > 0 && (
+      <div style={{marginTop: '10px'}}>
+        <strong>Incidents:</strong>
+        <ul style={{paddingLeft: '20px'}}>
+          {trafficInfo.incidents.map((incident, i) => (
+            <li key={i}>
+              {incident.type} (until {new Date(incident.endTime).toLocaleTimeString()})
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
   </div>
 )}
 
@@ -568,12 +580,15 @@ const RouteMap = () => {
 
         {/* Planned Route */}
         {route.length > 1 && (
-          <Polyline
-            positions={route}
-            color={colors.plannedRoute}
-            weight={4}
-            opacity={0.7}
-          />
+        <Polyline
+        positions={route}
+        color={trafficInfo ? 
+          (trafficInfo.congestion < 30 ? '#4CAF50' : 
+           trafficInfo.congestion < 70 ? '#FFC107' : '#F44336') : 
+          colors.plannedRoute}
+        weight={6}
+        opacity={0.8}
+      />
         )}
 
         {/* Route Start/End Markers */}
@@ -588,6 +603,33 @@ const RouteMap = () => {
           </>
         )}
 
+ {/* Incident Markers */}
+ {trafficInfo?.incidents?.map((incident, i) => (
+          <Marker 
+            key={`incident-${i}`} 
+            position={incident.coordinates}
+            icon={new L.DivIcon({
+              html: `<div style="
+                background: #ff4444;
+                color: white;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-weight: bold;
+              ">!</div>`,
+              className: '',
+              iconSize: [20, 20]
+            })}
+          >
+            <Popup>
+              <strong>{incident.type}</strong><br />
+              {new Date(incident.startTime).toLocaleString()} - {new Date(incident.endTime).toLocaleString()}
+            </Popup>
+          </Marker>
+        ))}
         {/* Stations */}
         {stations.map((station, idx) => (
           <Marker key={idx} position={[station.lat, station.lng]} icon={stationsIcon}>
@@ -597,6 +639,7 @@ const RouteMap = () => {
             </Popup>
           </Marker>
         ))}
+
       </MapContainer>
     </>
   );
