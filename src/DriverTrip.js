@@ -2,13 +2,23 @@ import axios from "axios";
 import { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 import Swal from 'sweetalert2'
-import styled, { keyframes } from 'styled-components';
+import styled, { keyframes,createGlobalStyle } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
 
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
 
 // Styled Components
+const GlobalStyle = createGlobalStyle`
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+  
+  body {
+    font-family: 'Poppins', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f5f7fa;
+  }
+`;
 const Logo = styled.img`
   display: block;
   margin: 0 auto 1rem;
@@ -376,6 +386,8 @@ setIsLoading(true)
   }, []);
   
   return (
+    <>
+    <GlobalStyle />
     <Container>
       <Logo src="/logo.png" alt="Company Logo" />
       <Title>
@@ -425,7 +437,7 @@ setIsLoading(true)
         </StatusMessage>
       )}
     </Container>
-
+    </>
   );
 };
 

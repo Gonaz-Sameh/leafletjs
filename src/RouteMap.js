@@ -12,39 +12,243 @@ import L from "leaflet";
 import io from "socket.io-client"; // 🔴 ADD
 import "leaflet/dist/leaflet.css";
 import { useRef } from "react";
+import Swal from 'sweetalert2'
+import axios from "axios";
+import styled, { keyframes, createGlobalStyle } from 'styled-components';
+import { PulseLoader } from 'react-spinners';
+import { FaLayerGroup, FaTrashAlt, FaCheck, FaBus, FaExpand, FaChevronLeft, FaChevronRight, FaMapMarkerAlt, FaRoute, FaTrash, FaSave, FaPlus, FaClock, FaTrafficLight } from 'react-icons/fa';
+
+// Animations
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+// Animations
+const slideIn = keyframes`
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+`;
+
+const slideOut = keyframes`
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-100%); opacity: 0; }
+`;
+// Styled Components
+const GlobalStyle = createGlobalStyle`
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+  
+  body {
+    font-family: 'Poppins', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f5f7fa;
+  }
+`;
+const AppContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+`;
+
+const Header = styled.header`
+  background: white;
+  padding: 1px 0;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  animation: ${fadeIn} 0.5s ease-out;
+`;
+
+const Logo = styled.img`
+  height: 100px;
+  max-width: 100%;
+  object-fit: contain;
+`;
 
 
+// Styled Components
+const PanelContainer = styled.div`
+  position: absolute;
+  top: 10px;
+  left: 50px;
+  z-index: 1000;
+  display: flex;
+`;
 
+const ToggleButton = styled.button`
+
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: 8px ;
+  width: 32px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
+  
+  &:hover {
+    background: #f8f9fa;
+  }
+`;
+const MapStyledContainer = styled.div`
+  position: relative;
+  flex-grow: 1;
+  height: calc(100vh - 80px);
+`;
+const ControlPanel = styled.div`
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px 0 0 8px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 260px;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  animation: ${props => props.isOpen ? slideIn : slideOut} 0.3s forwards;
+  transform-origin: left center;
+`;
+
+const PanelSection = styled.div`
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+  
+  &:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+`;
+
+const SectionTitle = styled.h3`
+  margin: 0 0 12px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+`;
+
+const ActionButton = styled.button`
+  background: ${props => props.primary ? '#3498db' : props.danger ? '#e74c3c' : '#f8f9fa'};
+  color: ${props => props.primary || props.danger ? 'white' : '#2c3e50'};
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  
+  &:hover {
+    background: ${props => props.primary ? '#2980b9' : props.danger ? '#c0392b' : '#e9ecef'};
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+  
+  &:disabled {
+    background: #ecf0f1;
+    color: #bdc3c7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+`;
+
+const StyledSelect = styled.select`
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: white;
+  transition: all 0.2s;
+  margin-bottom: 12px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  
+  &:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+  }
+`;
+
+const TrafficInfoCard = styled.div`
+  background: white;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+`;
+
+const TrafficRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+`;
+
+const TrafficLabel = styled.span`
+  color: #7f8c8d;
+  font-weight: 500;
+`;
+
+const TrafficValue = styled.span`
+  font-weight: 600;
+  color: ${props => {
+    if (props.danger) return '#e74c3c';
+    if (props.warning) return '#f39c12';
+    if (props.success) return '#27ae60';
+    return '#2c3e50';
+  }};
+`;
+
+const ErrorMessage = styled.div`
+  color: #e74c3c;
+  padding: 8px;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 4px;
+  margin-top: 8px;
+  font-size: 14px;
+`;
+const LoadingSpinner = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px;
+`;
+
+// Socket connection
 const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
-const startIcon = new L.DivIcon({
-  html: `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="11" fill="#F3CA14" stroke="green" stroke-width="1"/>
-      <text x="12" y="17" font-size="13" text-anchor="middle" fill="black">S</text>
-    </svg>
-  `,
-  className: "",
-  iconSize: [25, 25],
-  iconAnchor: [12, 12]
-});
 
-const endIcon = new L.DivIcon({
+// Custom icons
+const createCustomIcon = (color, letter, borderColor = 'white') => new L.DivIcon({
   html: `
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="11" fill="#F3CA14" stroke="red" stroke-width="1"/>
-      <text x="12" y="17" font-size="13" text-anchor="middle" fill="black">E</text>
-    </svg>
-  `,
-  className: "",
-  iconSize: [25, 25],
-  iconAnchor: [12, 12]
-});
-
-const busLiveIcon = new L.DivIcon({
-  html: `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="green" stroke="#FFF" stroke-width="3"/>
-      <text x="12" y="16" font-size="14" text-anchor="middle" fill="white">B</text>
+      <circle cx="12" cy="12" r="10" fill="${color}" stroke="${borderColor}" stroke-width="2"/>
+      <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-weight="bold">${letter}</text>
     </svg>
   `,
   className: "",
@@ -52,42 +256,35 @@ const busLiveIcon = new L.DivIcon({
   iconAnchor: [12, 12]
 });
 
-
-
-// Custom SVG-based icons for better control
-const stationsIcon = new L.DivIcon({
-  html: `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="black" stroke="#FFF" stroke-width="2"/>
-      <text x="12" y="16" font-size="12" text-anchor="middle" fill="white">S</text>
-    </svg>
-  `,
-  className: "",
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
-
-const busOfflineIcon = new L.DivIcon({
-  html: `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path fill="#9C27B0" d="M18 11H6V6h12m-1.5 11a1.5 1.5 0 0 1-1.5-1.5 1.5 1.5 0 0 1 1.5-1.5 1.5 1.5 0 0 1 1.5 1.5 1.5 1.5 0 0 1-1.5 1.5m-9 0A1.5 1.5 0 0 1 6 14.5 1.5 1.5 0 0 1 7.5 13a1.5 1.5 0 0 1 1.5 1.5A1.5 1.5 0 0 1 7.5 16M4 16c0 .88.39 1.67 1 2.22V20a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1h8v1a1 1 0 0 0 1 1h1a1 1 0 0 0 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4S4 2.5 4 6v10z"/>
-    </svg>
-  `,
-  className: "",
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
-
+const startIcon = createCustomIcon('#2ecc71', 'S');
+const endIcon = createCustomIcon('#e74c3c', 'E');
+const busLiveIcon = createCustomIcon('#3498db', 'B');
+const stationsIcon = createCustomIcon('#9b59b6', 'S');
+const busOfflineIcon = createCustomIcon('#95a5a6', 'B');
 const RouteMap = () => {
-  // Color scheme for better visualization
+  const showAlert = (status = 'error', text = 'Someting Went Wrong.') => {
+    Swal.fire({
+      //title: 'Alert',
+      text: text,
+      icon: status,
+      /*showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!',
+      position: 'top-end',
+      timer: 1500*/
+    })
+  }
+  // Color scheme
   const colors = {
-    plannedRoute: '#3388ff',  // Blue for planned routes
-    activeTrip: '#ff7800',    // Orange for active trips
-    completedTrip: '#555',    // Dark gray for completed trips
-    liveBus: '#e53e3e',       // Red for live bus
-    offlineBus: '#718096',    // Gray for offline bus
-    station: '#38a169'        // Green for stations
+    plannedRoute: '#3388ff',
+    activeTrip: '#ff7800',
+    completedTrip: '#555',
+    liveBus: '#e53e3e',
+    offlineBus: '#718096',
+    station: '#38a169'
   };
+
   const [selectedTile, setSelectedTile] = useState('osm'); // Default to OpenStreetMap
 
   const tileLayers = {
@@ -123,10 +320,10 @@ const RouteMap = () => {
   const [disabledDuringDrow, setDisabledDuringDrow] = useState(false);
 
 
-    const [trafficInfo, setTrafficInfo] = useState(null);
-    const [isLoadingTraffic, setIsLoadingTraffic] = useState(false);
-    const [error, setError] = useState(null);
-
+  const [trafficInfo, setTrafficInfo] = useState(null);
+  const [isLoadingTraffic, setIsLoadingTraffic] = useState(false);
+  const [error, setError] = useState(null);
+  const [isOpen, setIsOpen] = useState(true);
 
   // Reset `shouldFitBounds` after fitting is complete
   const handleFitBoundsComplete = () => {
@@ -151,12 +348,19 @@ const RouteMap = () => {
 
   //get routes to select route from dropdown ,
   useEffect(() => {
-    fetch(`${backend_baseurl}/api/v1/routes`, {
-      method: 'GET',
-    })
-      .then((res) => res.json())
-      .then((data) => setSavedRoutes(data))
-      .catch((err) => console.error("Error fetching routes", err));
+
+    let getRoutes = async () => {
+      try {
+        const res = await axios.get(`${backend_baseurl}/api/v1/routes`)
+        setSavedRoutes(res.data)
+      } catch (err) {
+        console.log(err);
+        //alert("error while getting routes",err )
+        showAlert('error', `error while getting routes : ${err}`)
+      }
+    }
+
+    getRoutes()
   }, []);
 
 
@@ -171,30 +375,31 @@ const RouteMap = () => {
     setTripCoordinatesTimestamp([]);
     setTripLatestLiveCoordinates([])
     //
-    // Fetch route details
-    fetch(`${backend_baseurl}/api/v1/routes/${selectedRouteId}`)
-      .then((res) => res.json())
-      .then((data) => {
+    let getData = async () => {
+      // Fetch route details
+      try {
+        const res = await axios.get(`${backend_baseurl}/api/v1/routes/${selectedRouteId}`)
+        let data = res.data
         setRoute(data.coordinates.map(({ lat, lng }) => [lat, lng]));
         setStations(data.stations);
         setIsDrawing(false);
         setIsNewRoute(false);
-
-        // Trigger fitting to bounds
         setShouldFitBounds(true);
-      })
-      .catch((err) => console.error("Error loading selected route", err));
+      } catch (err) {
+        console.log(err);
+        showAlert('error', `Error loading selected route : ${err}`)
+      }
 
-    // Fetch trips for that route
-    fetch(`${backend_baseurl}/api/v1/trips/by-route/${selectedRouteId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        console.log(data);
-
-        setTrips(data);
-
-      })
-      .catch((err) => console.error("Error fetching trips:", err));
+      // Fetch trips for that route
+      try {
+        const res = await axios.get(`${backend_baseurl}/api/v1/trips/by-route/${selectedRouteId}`)
+        setTrips(res.data)
+      } catch (err) {
+        console.log(err);
+        showAlert('error', `error while getting trips : ${err}`)
+      }
+    }
+    getData();
   }, [selectedRouteId]);
 
   //get one trip  selected  from dropdown ,
@@ -207,23 +412,26 @@ const RouteMap = () => {
     setTripCoordinatesTimestamp([]);
     setTripLatestLiveCoordinates([])
 
-    fetch(`${backend_baseurl}/api/v1/trips/${selectedTripId}`)
-      .then((res) => res.json())
-      .then((data) => {
+    let getSelectedTripDetails = async () => {
+      try {
+        const res = await axios.get(`${backend_baseurl}/api/v1/trips/${selectedTripId}`)
+        let data = res.data
         // Convert trip coordinates to Leaflet format: [[lat, lng], ...]
         const path = data.coordinates.map((point) => [point.lat, point.lng]);
         setTripPath(path);
         const timestamp = data.coordinates.map((t) => [t.timestamp]);
         setTripCoordinatesTimestamp(timestamp);
-        console.log(data);
-
         let latestLiveCoordinates = data.latestLiveCoordinates;
         if (latestLiveCoordinates && latestLiveCoordinates.lat && latestLiveCoordinates.lng) {
           setTripLatestLiveCoordinates([[latestLiveCoordinates.lat, latestLiveCoordinates.lng]])
         }
         //there is time of latestSyncedCoordinates
-      })
-      .catch((err) => console.error("Error fetching trip data:", err));
+      } catch (err) {
+        console.log(err);
+        showAlert('error', `Error fetching trip data: : ${err}`)
+      }
+    }
+    getSelectedTripDetails()
   }, [selectedTripId]);
 
 
@@ -258,16 +466,6 @@ const RouteMap = () => {
     return null;
   };
 
-  /*const FitBoundsToRoute = ({ route, isDrawing }) => {
-    const map = useMap();
-    useEffect(() => {
-      if (!isDrawing && route.length > 0) {
-        const bounds = L.latLngBounds(route);
-        map.fitBounds(bounds, { padding: [50, 50] });
-      }
-    }, [route, isDrawing, map]);
-    return null;
-  };*/
   const FitBoundsToRoute = ({ route, isDrawing, selectedRouteId, shouldFitBounds, onFitBoundsComplete }) => {
     const map = useMap();
 
@@ -296,20 +494,15 @@ const RouteMap = () => {
     const name = prompt("Route Name:");
     if (!name) return;
     try {
-      const response = await fetch(`${backend_baseurl}/api/v1/routes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          coordinates: route.map(([lat, lng]) => ({ lat, lng })),
-          stations,
-        }),
+      const response = await axios.post(`${backend_baseurl}/api/v1/routes`, {
+        name,
+        coordinates: route.map(([lat, lng]) => ({ lat, lng })),
+        stations,
       });
 
-      const data = await response.json();
-      alert("Route saved!");
+      const data = response.data
+      showAlert('success', `Route Adding Successfully`)
       setSavedRoutes((prev) => [...prev, data]);
-
       setRoute([]);
       setStations([]);
       setIsDrawing(true);
@@ -317,7 +510,8 @@ const RouteMap = () => {
       setSelectedRouteId(null);
       setDisabledDuringDrow(false)
     } catch (err) {
-      console.error("Error saving route:", err);
+      console.log(err);
+      showAlert('error', `Error saving route: ${err}`)
     }
   };
 
@@ -337,13 +531,13 @@ const RouteMap = () => {
 
   const estimateTravelTime = async () => {
     if (!selectedRouteId || route.length < 2) return;
-  
+
     setIsLoadingTraffic(true);
     setError(null);
-  
+
     try {
       console.log(route);
-      
+
       // 1. Get base route from OpenRouteService
       const orsResponse = await fetch('https://api.openrouteservice.org/v2/directions/driving-car', {
         method: 'POST',
@@ -356,10 +550,10 @@ const RouteMap = () => {
           instructions: false
         })
       });
-      
+
       const orsData = await orsResponse.json();
       const baseDuration = orsData.routes[0].summary.duration; // in seconds
-  
+
       // 2. Get traffic data from TomTom
       const tomTomResponse = await fetch(
         `https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json` +
@@ -367,15 +561,15 @@ const RouteMap = () => {
         `&point=${route[0][0]},${route[0][1]}` + // Start point
         `&unit=KMPH`
       );
-      
+
       const tomTomData = await tomTomResponse.json();
       const currentSpeed = tomTomData.flowSegmentData.currentSpeed;
       const freeFlowSpeed = tomTomData.flowSegmentData.freeFlowSpeed;
-  
+
       // 3. Calculate adjusted time
       const congestionFactor = freeFlowSpeed / currentSpeed;
       const adjustedDuration = baseDuration * congestionFactor;
-  
+
       setTrafficInfo({
         baseTime: Math.round(baseDuration / 60), // in minutes
         adjustedTime: Math.round(adjustedDuration / 60), // in minutes
@@ -383,7 +577,7 @@ const RouteMap = () => {
         freeFlowSpeed: Math.round(freeFlowSpeed),
         congestion: Math.round((1 - (currentSpeed / freeFlowSpeed)) * 100) // %
       });
-  
+
     } catch (err) {
       setError("Failed to get traffic data. Using base estimation only.");
       console.error(err);
@@ -394,222 +588,104 @@ const RouteMap = () => {
 
   return (
     <>
-      {/* Tile Layer Selector Dropdown */}
-      <div style={{ padding: '10px', zIndex: 1000, position: 'relative' }}>
-        <label htmlFor="tile-select">Map Style: </label>
-        <select
-          id="tile-select"
-          value={selectedTile}
-          onChange={(e) => setSelectedTile(e.target.value)}
-          style={{ padding: '5px', borderRadius: '4px' }}
-        >
-          <option value="osm">OpenStreetMap (Default)</option>
-          <option value="esri">Esri Satellite Imagery</option>
-        </select>
-      </div>
-      <div style={{ padding: "10px" }}>
-        <button onClick={removeLastPoint} disabled={!isDrawing || route.length === 0}>
-          ⏪ Remove Last Point
-        </button>{" "}
-        <button onClick={finishRoute} disabled={!isDrawing || route.length < 2}>
-          ✅ Finish Drawing
-        </button>{" "}
-        <button onClick={saveRoute} disabled={!isNewRoute || isDrawing || route.length < 2}>
-          💾 Save Route
-        </button>{" "}
-        <button onClick={startNewRoute}>
-          🆕 Start New Route
-        </button>
-        <br />
-        {!disabledDuringDrow && <>
+      <AppContainer>
+        <Header>
+          <Logo src="/logo.png" alt="Company Logo" />
+        </Header>
+        <MapStyledContainer>
 
-          <label>Select Route: </label>
-          <select
-            onChange={(e) => setSelectedRouteId(e.target.value)}
-            defaultValue=""
+
+          <MapContainer
+            ref={mapRef}
+            center={[30.0444, 31.2357]}
+            zoom={13}
+            style={{ height: "100%", width: "100%" }}
+            scrollWheelZoom={!isDrawing}
+            doubleClickZoom={false}
           >
-            <option value="" disabled>Select a route</option>
-            {savedRoutes.map((r) => (
-              <option key={r._id} value={r._id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
+            <TileLayer
+              attribution={tileLayers[selectedTile].attribution}
+              url={tileLayers[selectedTile].url}
+            />
 
-          {trips.length > 0 && (
-            <>
-              <label>Select Trip: </label>
-              <select
-                onChange={(e) => setSelectedTripId(e.target.value)}
-                defaultValue=""
-              >
-                <option value="" disabled>Select a trip</option>
-                {trips.map((trip) => (
-                  <option key={trip._id} value={trip._id}>
-                    {new Date(trip.startedAt).toLocaleString()} - {new Date(trip.endedAt).toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <button
-            onClick={() => setShouldFitBounds(true)}
-            disabled={!selectedRouteId}
-          >
-            📍 Fit Bounds
-          </button>   
-          
-          {!disabledDuringDrow && selectedRouteId && (
-  <button 
-    onClick={estimateTravelTime}
-    disabled={isLoadingTraffic}
-    style={{marginLeft: '10px'}}
-  >
-    {isLoadingTraffic ? 'Calculating...' : '🚦 Get Traffic Estimate'}
-  </button>
-)}
-{trafficInfo && (
-  <div style={{
-    padding: '10px',
-    margin: '10px 0',
-    background: '#f8f9fa',
-    borderRadius: '5px',
-    border: '1px solid #ddd'
-  }}>
-    <h4>Traffic Information</h4>
-    <div style={{display: 'flex', justifyContent: 'space-between'}}>
-      <div>
-        <strong>Base Time:</strong> {trafficInfo.baseTime} mins
-        <br />
-        <strong>With Traffic:</strong> {trafficInfo.adjustedTime} mins
-      </div>
-      <div>
-        <strong>Current Speed:</strong> {trafficInfo.currentSpeed} km/h
-        <br />
-        <strong>Free Flow Speed:</strong> {trafficInfo.freeFlowSpeed} km/h
-      </div>
-      <div>
-        <strong>Congestion:</strong> {trafficInfo.congestion}%
-        <br />
-        <strong>Delay:</strong> +{trafficInfo.adjustedTime - trafficInfo.baseTime} mins
-      </div>
-    </div>
-    
-    {trafficInfo.incidents?.length > 0 && (
-      <div style={{marginTop: '10px'}}>
-        <strong>Incidents:</strong>
-        <ul style={{paddingLeft: '20px'}}>
-          {trafficInfo.incidents.map((incident, i) => (
-            <li key={i}>
-              {incident.type} (until {new Date(incident.endTime).toLocaleTimeString()})
-            </li>
-          ))}
-        </ul>
-      </div>
-    )}
-  </div>
-)}
+            <MapClickHandler />
+            <FitBoundsToRoute
+              route={route}
+              isDrawing={isDrawing}
+              selectedRouteId={selectedRouteId}
+              shouldFitBounds={shouldFitBounds}
+              onFitBoundsComplete={handleFitBoundsComplete}
+            />
 
-{error && (
-  <div style={{color: 'red', padding: '10px'}}>
-    {error}
-  </div>
-)}          
-          
-          </>}
-      </div>
+            {/* Live Bus Marker */}
+            {busPath.length > 0 && (
+              <Marker position={busPath[0]} icon={busLiveIcon}>
+                <Popup>Live Bus Location</Popup>
+              </Marker>
+            )}
 
-      <MapContainer
-        ref={mapRef}
-        center={[30.0444, 31.2357]}
-        zoom={13}
-        style={{ height: "85vh", width: "100%" }}
-        scrollWheelZoom={!isDrawing}
-        doubleClickZoom={false}
-      >
-        <TileLayer
-          attribution={tileLayers[selectedTile].attribution}
-          url={tileLayers[selectedTile].url}
-        />
+            {/* Offline Bus Marker */}
+            {tripLatestLiveCoordinates.length > 0 && (
+              <Marker position={tripLatestLiveCoordinates[0]} icon={busOfflineIcon}>
+                <Popup>Last Known Location</Popup>
+              </Marker>
+            )}
 
-        <MapClickHandler />
-        <FitBoundsToRoute
-          route={route}
-          isDrawing={isDrawing}
-          selectedRouteId={selectedRouteId}
-          shouldFitBounds={shouldFitBounds}
-          onFitBoundsComplete={handleFitBoundsComplete}
-        />
+            {/* Trip Path */}
+            {tripPath.length > 1 && (
+              <Polyline
+                positions={tripPath}
+                color={colors.activeTrip}
+                weight={5}
+                opacity={0.8}
+                dashArray={selectedTripId ? undefined : "5, 5"} // Dashed for completed trips
+              />
+            )}
 
-        {/* Live Bus Marker */}
-        {busPath.length > 0 && (
-          <Marker position={busPath[0]} icon={busLiveIcon}>
-            <Popup>Live Bus Location</Popup>
-          </Marker>
-        )}
+            {/* Trip Start/End Markers */}
+            {tripPath.length > 0 && (
+              <>
+                <Marker position={tripPath[0]} icon={startIcon}>
+                  <Popup>Trip Start Point</Popup>
+                </Marker>
+                <Marker position={tripPath[tripPath.length - 1]} icon={endIcon}>
+                  <Popup>Trip End Point</Popup>
+                </Marker>
+              </>
+            )}
 
-        {/* Offline Bus Marker */}
-        {tripLatestLiveCoordinates.length > 0 && (
-          <Marker position={tripLatestLiveCoordinates[0]} icon={busOfflineIcon}>
-            <Popup>Last Known Location</Popup>
-          </Marker>
-        )}
+            {/* Planned Route */}
+            {route.length > 1 && (
+              <Polyline
+                positions={route}
+                color={trafficInfo ?
+                  (trafficInfo.congestion < 30 ? '#4CAF50' :
+                    trafficInfo.congestion < 70 ? '#FFC107' : '#F44336') :
+                  colors.plannedRoute}
+                weight={6}
+                opacity={0.8}
+              />
+            )}
 
-        {/* Trip Path */}
-        {tripPath.length > 1 && (
-          <Polyline
-            positions={tripPath}
-            color={colors.activeTrip}
-            weight={5}
-            opacity={0.8}
-            dashArray={selectedTripId ? undefined : "5, 5"} // Dashed for completed trips
-          />
-        )}
+            {/* Route Start/End Markers */}
+            {route.length > 0 && (
+              <>
+                <Marker position={route[0]} icon={startIcon}>
+                  <Popup>Route Start Point</Popup>
+                </Marker>
+                <Marker position={route[route.length - 1]} icon={endIcon}>
+                  <Popup>Route End Point</Popup>
+                </Marker>
+              </>
+            )}
 
-        {/* Trip Start/End Markers */}
-        {tripPath.length > 0 && (
-          <>
-            <Marker position={tripPath[0]} icon={startIcon}>
-              <Popup>Trip Start Point</Popup>
-            </Marker>
-            <Marker position={tripPath[tripPath.length - 1]} icon={endIcon}>
-              <Popup>Trip End Point</Popup>
-            </Marker>
-          </>
-        )}
-
-        {/* Planned Route */}
-        {route.length > 1 && (
-        <Polyline
-        positions={route}
-        color={trafficInfo ? 
-          (trafficInfo.congestion < 30 ? '#4CAF50' : 
-           trafficInfo.congestion < 70 ? '#FFC107' : '#F44336') : 
-          colors.plannedRoute}
-        weight={6}
-        opacity={0.8}
-      />
-        )}
-
-        {/* Route Start/End Markers */}
-        {route.length > 0 && (
-          <>
-            <Marker position={route[0]} icon={startIcon}>
-              <Popup>Route Start Point</Popup>
-            </Marker>
-            <Marker position={route[route.length - 1]} icon={endIcon}>
-              <Popup>Route End Point</Popup>
-            </Marker>
-          </>
-        )}
-
- {/* Incident Markers */}
- {trafficInfo?.incidents?.map((incident, i) => (
-          <Marker 
-            key={`incident-${i}`} 
-            position={incident.coordinates}
-            icon={new L.DivIcon({
-              html: `<div style="
+            {/* Incident Markers */}
+            {trafficInfo?.incidents?.map((incident, i) => (
+              <Marker
+                key={`incident-${i}`}
+                position={incident.coordinates}
+                icon={new L.DivIcon({
+                  html: `<div style="
                 background: #ff4444;
                 color: white;
                 border-radius: 50%;
@@ -620,27 +696,188 @@ const RouteMap = () => {
                 align-items: center;
                 font-weight: bold;
               ">!</div>`,
-              className: '',
-              iconSize: [20, 20]
-            })}
-          >
-            <Popup>
-              <strong>{incident.type}</strong><br />
-              {new Date(incident.startTime).toLocaleString()} - {new Date(incident.endTime).toLocaleString()}
-            </Popup>
-          </Marker>
-        ))}
-        {/* Stations */}
-        {stations.map((station, idx) => (
-          <Marker key={idx} position={[station.lat, station.lng]} icon={stationsIcon}>
-            <Popup>
-              <strong>{station.name}</strong><br />
-              Station #{idx + 1}
-            </Popup>
-          </Marker>
-        ))}
+                  className: '',
+                  iconSize: [20, 20]
+                })}
+              >
+                <Popup>
+                  <strong>{incident.type}</strong><br />
+                  {new Date(incident.startTime).toLocaleString()} - {new Date(incident.endTime).toLocaleString()}
+                </Popup>
+              </Marker>
+            ))}
+            {/* Stations */}
+            {stations.map((station, idx) => (
+              <Marker key={idx} position={[station.lat, station.lng]} icon={stationsIcon}>
+                <Popup>
+                  <strong>{station.name}</strong><br />
+                  Station #{idx + 1}
+                </Popup>
+              </Marker>
+            ))}
 
-      </MapContainer>
+          </MapContainer>
+          <PanelContainer>
+            {isOpen && (
+              <ControlPanel isOpen={isOpen}>
+                {/* Map Style Selector */}
+                <PanelSection>
+                  <SectionTitle><FaLayerGroup /> Map Style</SectionTitle>
+                  <StyledSelect
+                    value={selectedTile}
+                    onChange={(e) => setSelectedTile(e.target.value)}
+                  >
+                    <option value="osm">OpenStreetMap (Default)</option>
+                    <option value="esri">Esri Satellite Imagery</option>
+                  </StyledSelect>
+                </PanelSection>
+
+                {/* Drawing Controls */}
+                <PanelSection>
+                  <SectionTitle><FaRoute /> Route Drawing</SectionTitle>
+                  <ButtonGroup>
+                    <ActionButton
+                      onClick={removeLastPoint}
+                      disabled={!isDrawing || route.length === 0}
+                      danger
+                    >
+                      <FaTrashAlt /> Remove Last
+                    </ActionButton>
+                    <ActionButton
+                      onClick={finishRoute}
+                      disabled={!isDrawing || route.length < 2}
+                    >
+                      <FaCheck /> Finish
+                    </ActionButton>
+                    <ActionButton
+                      onClick={saveRoute}
+                      disabled={!isNewRoute || isDrawing || route.length < 2}
+                      primary
+                    >
+                      <FaSave /> Save
+                    </ActionButton>
+                    <ActionButton onClick={startNewRoute}>
+                      <FaPlus /> New
+                    </ActionButton>
+                  </ButtonGroup>
+                </PanelSection>
+
+                {/* Route/Trip Selection */}
+                {!disabledDuringDrow && (
+                  <PanelSection>
+                    <SectionTitle><FaMapMarkerAlt /> Route Selection</SectionTitle>
+                    <StyledSelect
+                      onChange={(e) => setSelectedRouteId(e.target.value)}
+                      value={selectedRouteId || ""}
+                    >
+                      <option value="" disabled>Select a route</option>
+                      {savedRoutes.map((r) => (
+                        <option key={r._id} value={r._id}>
+                          {r.name}
+                        </option>
+                      ))}
+                    </StyledSelect>
+
+                    {trips.length > 0 && (
+                      <>
+                        <StyledSelect
+                          onChange={(e) => setSelectedTripId(e.target.value)}
+                          value={selectedTripId || ""}
+                        >
+                          <option value="" disabled>Select a trip</option>
+                          {trips.map((trip) => (
+                            <option key={trip._id} value={trip._id}>
+                              {new Date(trip.startedAt).toLocaleDateString()} - {new Date(trip.endedAt).toLocaleTimeString()}
+                            </option>
+                          ))}
+                        </StyledSelect>
+                        <ActionButton
+                          onClick={() => setShouldFitBounds(true)}
+                          disabled={!selectedRouteId}
+                        >
+                          <FaExpand /> Fit Bounds
+                        </ActionButton>
+                      </>
+                    )}
+                  </PanelSection>
+                )}
+
+                {/* Traffic Information */}
+                {!disabledDuringDrow && selectedRouteId && (
+                  <PanelSection>
+                    <SectionTitle><FaTrafficLight /> Traffic Analysis</SectionTitle>
+                    <ActionButton
+                      onClick={estimateTravelTime}
+                      disabled={isLoadingTraffic}
+                      primary
+                    >
+                      {isLoadingTraffic ? (
+                        <>
+                          <FaClock /> Calculating...
+                        </>
+                      ) : (
+                        <>
+                          <FaTrafficLight /> Get Estimate
+                        </>
+                      )}
+                    </ActionButton>
+
+                    {trafficInfo && (
+                      <TrafficInfoCard>
+                        <TrafficRow>
+                          <TrafficLabel>Base Time:</TrafficLabel>
+                          <TrafficValue>{trafficInfo.baseTime} mins</TrafficValue>
+                        </TrafficRow>
+                        <TrafficRow>
+                          <TrafficLabel>With Traffic:</TrafficLabel>
+                          <TrafficValue
+                            danger={trafficInfo.congestion > 70}
+                            warning={trafficInfo.congestion > 30 && trafficInfo.congestion <= 70}
+                            success={trafficInfo.congestion <= 30}
+                          >
+                            {trafficInfo.adjustedTime} mins
+                          </TrafficValue>
+                        </TrafficRow>
+                        <TrafficRow>
+                          <TrafficLabel>Current Speed:</TrafficLabel>
+                          <TrafficValue>{trafficInfo.currentSpeed} km/h</TrafficValue>
+                        </TrafficRow>
+                        <TrafficRow>
+                          <TrafficLabel>Congestion:</TrafficLabel>
+                          <TrafficValue
+                            danger={trafficInfo.congestion > 70}
+                            warning={trafficInfo.congestion > 30 && trafficInfo.congestion <= 70}
+                            success={trafficInfo.congestion <= 30}
+                          >
+                            {trafficInfo.congestion}%
+                          </TrafficValue>
+                        </TrafficRow>
+                        {trafficInfo.incidents?.length > 0 && (
+                          <>
+                            <TrafficRow style={{ marginTop: '8px' }}>
+                              <TrafficLabel>Incidents:</TrafficLabel>
+                              <TrafficValue>{trafficInfo.incidents.length}</TrafficValue>
+                            </TrafficRow>
+                          </>
+                        )}
+                      </TrafficInfoCard>
+                    )}
+
+                    {error && (
+                      <ErrorMessage>
+                        {error}
+                      </ErrorMessage>
+                    )}
+                  </PanelSection>
+                )}
+              </ControlPanel>
+            )}
+            <ToggleButton onClick={() => setIsOpen(!isOpen)}>
+              {isOpen ? <FaChevronLeft /> : <FaChevronRight />}
+            </ToggleButton>
+          </PanelContainer>
+        </MapStyledContainer>
+      </AppContainer>
     </>
   );
 };
