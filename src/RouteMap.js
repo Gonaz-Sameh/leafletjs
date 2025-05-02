@@ -63,7 +63,7 @@ const Header = styled.header`
 `;
 
 const Logo = styled.img`
-  height: 100px;
+  height: 85px;
   max-width: 100%;
   object-fit: contain;
 `;
@@ -72,7 +72,7 @@ const Logo = styled.img`
 // Styled Components
 const PanelContainer = styled.div`
   position: absolute;
-  top: 10px;
+  top: 8px;
   left: 50px;
   z-index: 1000;
   display: flex;
@@ -103,13 +103,16 @@ const MapStyledContainer = styled.div`
 `;
 const ControlPanel = styled.div`
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px 0 0 8px;
+  border-radius:  8px;
   padding: 16px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  width: 260px;
+  width: 290px;
   font-family: 'Segoe UI', Roboto, sans-serif;
   animation: ${props => props.isOpen ? slideIn : slideOut} 0.3s forwards;
   transform-origin: left center;
+    @media (max-width: 380px) {
+    width: 200px;
+}
 `;
 
 const PanelSection = styled.div`
@@ -239,7 +242,20 @@ const LoadingSpinner = styled.div`
   align-items: center;
   padding: 10px;
 `;
-
+const SwalStyles = createGlobalStyle`
+  .swal-confirm-btn {
+    background-color: #3498db !important;
+    &:hover {
+      background-color: #2980b9 !important;
+    }
+  }
+  .swal-cancel-btn {
+    background-color: #e74c3c !important;
+    &:hover {
+      background-color: #c0392b !important;
+    }
+  }
+`;
 // Socket connection
 const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
@@ -447,9 +463,33 @@ const RouteMap = () => {
     [isDrawing, route]
   );
 
-  const handleRightClick = useCallback((e) => {
+  const handleRightClick = useCallback(async(e) => {
     if (!isDrawing) return;
-    const name = prompt("Enter station name:");
+    //const name = prompt("Enter station name:");
+    const { value: name } = await Swal.fire({
+      title: 'Save Station',
+      text: 'Enter a name for this Station:',
+      input: 'text',
+      inputPlaceholder: 'e.g., Nasr City Makkram Ebid',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      cancelButtonText: 'Cancel',
+      inputValidator: (value) => {
+        if (!value) {
+          return 'You need to enter a station name!';
+        }
+        if (value.length > 50) {
+          return 'station name must be less than 50 characters!';
+        }
+      },
+      customClass: {
+        confirmButton: 'swal-confirm-btn',
+        cancelButton: 'swal-cancel-btn'
+      },
+      background: '#f8f9fa'
+    });
+  
+
     if (name) {
       setStations((prev) => [
         ...prev,
@@ -491,7 +531,29 @@ const RouteMap = () => {
   };
 
   const saveRoute = async () => {
-    const name = prompt("Route Name:");
+    //const name = prompt("Route Name:");
+    const { value: name } = await Swal.fire({
+      title: 'Save Route',
+      text: 'Enter a name for this Route:',
+      input: 'text',
+      inputPlaceholder: 'e.g., Nasr City - tahrir squire',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      cancelButtonText: 'Cancel',
+      inputValidator: (value) => {
+        if (!value) {
+          return 'You need to enter a Route name!';
+        }
+        if (value.length > 50) {
+          return 'Route name must be less than 50 characters!';
+        }
+      },
+      customClass: {
+        confirmButton: 'swal-confirm-btn',
+        cancelButton: 'swal-cancel-btn'
+      },
+      background: '#f8f9fa'
+    });
     if (!name) return;
     try {
       const response = await axios.post(`${backend_baseurl}/api/v1/routes`, {
@@ -702,7 +764,7 @@ const RouteMap = () => {
               >
                 <Popup>
                   <strong>{incident.type}</strong><br />
-                  {new Date(incident.startTime).toLocaleString()} - {new Date(incident.endTime).toLocaleString()}
+                  {new Date(incident.startTime).toLocaleTimeString()} - {new Date(incident.endTime).toLocaleTimeString()}
                 </Popup>
               </Marker>
             ))}
@@ -787,7 +849,7 @@ const RouteMap = () => {
                           <option value="" disabled>Select a trip</option>
                           {trips.map((trip) => (
                             <option key={trip._id} value={trip._id}>
-                              {new Date(trip.startedAt).toLocaleDateString()} - {new Date(trip.endedAt).toLocaleTimeString()}
+                              {new Date(trip.startedAt).toLocaleString()} - {trip.endedAt ? new Date(trip.endedAt).toLocaleTimeString() : "ongoing"} 
                             </option>
                           ))}
                         </StyledSelect>
