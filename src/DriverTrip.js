@@ -5,7 +5,8 @@ import Swal from 'sweetalert2'
 import styled, { keyframes } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
 
-const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
+//const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
+
 
 // Styled Components
 const Logo = styled.img`
@@ -109,6 +110,7 @@ const TripIndicator = styled.div`
 
 
 const DriverTrip = () => {
+  const socketRef = useRef(null);
   const [routes, setRoutes] = useState([]);
   const [selectedRoute, setSelectedRoute] = useState("");
   const [tripStarted, setTripStarted] = useState(false);
@@ -165,6 +167,7 @@ const DriverTrip = () => {
     }
  
       getRoutes()
+      
   }, []);
 
   const startTrip = async () => {
@@ -203,11 +206,15 @@ setIsLoading(true)
       setCoordinates([]);
       saveCounterRef.current = 0;
 
+      //safty cleanup
       if (watchIdRef.current) {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
       //alert("Trip ended and data saved.");
       showAlert('success' ,`Trip ended Successfully`)
     } catch (e) {
@@ -222,6 +229,8 @@ setIsLoading(true)
   useEffect(() => {
     if (tripStarted && tripId) {
       if ("geolocation" in navigator) {
+         // Connect socket
+    socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
         watchIdRef.current = navigator.geolocation.watchPosition(
           (pos) => {
             const { latitude, longitude } = pos.coords;
@@ -247,14 +256,14 @@ setIsLoading(true)
                 if (distance < 10) {
                   const updated = [...prev, point];
                   // Now emit both
-                  socket.emit("locationUpdate", {
+                  socketRef.current.emit("locationUpdate", {
                     tripId,
                     routeId: selectedRoute,
                     busId,
                     lat: prev[0].lat,
                     lng: prev[0].lng,
                   });
-                  socket.emit("locationUpdate", {
+                  socketRef.current.emit("locationUpdate", {
                     tripId,
                     routeId: selectedRoute,
                     busId,
@@ -267,7 +276,7 @@ setIsLoading(true)
                 else {
                   console.log("Discarded inaccurate first coordinate");
                   // Only emit the second coordinate
-                  socket.emit("locationUpdate", {
+                  socketRef.current.emit("locationUpdate", {
                     tripId,
                     routeId: selectedRoute,
                     busId,
@@ -318,7 +327,7 @@ setIsLoading(true)
               }
 
               // Emit new position
-              socket.emit("locationUpdate", {
+              socketRef.current.emit("locationUpdate", {
                 tripId,
                 routeId: selectedRoute,
                 busId,
@@ -338,15 +347,34 @@ setIsLoading(true)
         //alert("Geolocation is not supported by your browser.");
         showAlert('error' ,`Geolocation is not supported by your browser.`)
       }
-
+    }
       return () => {
         if (watchIdRef.current) {
           navigator.geolocation.clearWatch(watchIdRef.current);
         }
+        if (socketRef.current) {
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
       };
-    }
+    
   }, [tripStarted, tripId]);
-
+  //safty cleanup
+  useEffect(() => {
+    //in general
+      // run when depandacy state change
+  //run when component close
+    return () => {
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
+  
   return (
     <Container>
       <Logo src="/logo.png" alt="Company Logo" />
