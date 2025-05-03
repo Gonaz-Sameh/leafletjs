@@ -280,7 +280,7 @@ const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24);
 const RouteMap = () => {
   const socketRef = useRef(null);
   const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
-
+  const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe';
   const showAlert = (status = 'error', text = 'Someting Went Wrong.') => {
     Swal.fire({
       //title: 'Alert',
@@ -349,23 +349,138 @@ const RouteMap = () => {
     setShouldFitBounds(false);
   };
  
-  /*useEffect(() => {
+  useEffect(() => {
     const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
+    console.log(socket);
+    
     socket.on("busLocationUpdate", ({ tripId, routeId, busId, lat, lng }) => {
+      console.log("socket");
       if (routeId === selectedRouteId && tripId == selectedTripId) {
         setBusPath([[lat, lng]]);
       }
     });
     return () => socket.disconnect();
-  }, [selectedRouteId, selectedTripId]);*/
+  }, [selectedRouteId, selectedTripId]);
 
- 
+  const toRadians = (degrees) => degrees * (Math.PI / 180);
 
-  useEffect(() => {
+const haversineDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = toRadians(lat1);
+  const φ2 = toRadians(lat2);
+  const Δφ = toRadians(lat2 - lat1);
+  const Δλ = toRadians(lon2 - lon1);
+
+  const a = Math.sin(Δφ / 2) ** 2 +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+};
+
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const getWalkingRoute = async (from, to, apiKey) => {
+  const url = `https://api.tomtom.com/routing/1/calculateRoute/${from.lng},${from.lat}:${to.lng},${to.lat}/json?key=${apiKey}&travelMode=pedestrian`;
+
+  const res = await axios.get(url);
+  const data =  res.data;
+
+  if (data.routes?.[0]) {
+    const summary = data.routes[0].summary;
+    return {
+      distance: summary.lengthInMeters,
+      time: summary.travelTimeInSeconds
+    };
+  }
+  return null;
+};
+
+const findNearestStationEfficiently = async (userLat, userLng, apiKey, limit = 3) => {
+  try {
+    const response = await axios.get(`${backend_baseurl}/api/v1/stations`);
+    const stations = response.data;
+
+    if (!stations.length) return [];
+
+    // Step 1: Sort by Haversine distance
+    const sortedByHaversine = stations
+      .map(st => ({
+        ...st,
+        haversine: haversineDistance(userLat, userLng, st.lat, st.lng)
+      }))
+      .sort((a, b) => a.haversine - b.haversine);
+
+    const closestStations = sortedByHaversine.slice(0, Math.min(limit, sortedByHaversine.length));
+
+    // Step 2: Get walking route using TomTom API
+    const tomTomResults = [];
+
+    for (const station of closestStations) {
+      try {
+        const route = await getWalkingRoute(
+          { lat: userLat, lng: userLng },
+          { lat: station.lat, lng: station.lng },
+          apiKey
+        );
+
+        if (route) {
+          tomTomResults.push({
+            ...station,
+            walkingDistance: route.distance,
+            walkingTime: route.time
+          });
+        }
+      } catch (err) {
+        console.error("TomTom error for station:", station.name || station._id, err);
+        // Continue to next station
+      }
+
+      await delay(1000); // Wait 1s between requests
+    }
+
+    // Step 3: Return sorted by walking time
+    if (tomTomResults.length) {
+      return tomTomResults
+        .sort((a, b) => a.walkingTime - b.walkingTime)
+        .slice(0, 3);
+    } else {
+      // TomTom failed or returned nothing
+      console.warn("TomTom failed, falling back to Haversine.");
+      return closestStations.map(st => ({
+        ...st,
+        fallback: true,
+        haversineDistanceInMeters: st.haversine
+      }));
+    }
+
+  } catch (error) {
+    console.error("Error in finding stations:", error);
+    return [];
+  }
+};
+
+// Example usage in React
+useEffect(() => {
+  const getNearest = async () => {
+    const stations = await findNearestStationEfficiently(30.044710, 31.384037, TOMTOM_API_KEY);
+    console.log("Top 3 nearest stations (walking or fallback):", stations);
+  };
+
+  getNearest();
+}, []);
+
+  
+  /*useEffect(() => {
     // Connect socket on component mount
     socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
+
+    console.log(socketRef.current);
     // Listen to live bus updates
     const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
+      console.log({ tripId, routeId, busId, lat, lng });
+      
       if (routeId === selectedRouteId && tripId == selectedTripId) {
         setBusPath([[lat, lng]]);
       }
@@ -381,9 +496,9 @@ const RouteMap = () => {
         socketRef.current = null;
       }
     };
-  }, []);
+  }, []);*/
 
-  //get routes to select route from dropdown ,
+  //get routes [main keys] to select route from dropdown ,
   useEffect(() => {
 
     let getRoutes = async () => {
@@ -401,7 +516,7 @@ const RouteMap = () => {
   }, []);
 
 
-  //get one route  selected  from dropdown , and get its trips 
+  //get one route [detailed keys] selected  from dropdown , and get its trips [main keys]
   useEffect(() => {
     if (!selectedRouteId) return;
     //clear old route selected data
@@ -417,6 +532,8 @@ const RouteMap = () => {
       try {
         const res = await axios.get(`${backend_baseurl}/api/v1/routes/${selectedRouteId}`)
         let data = res.data
+        console.log(data);
+        
         setRoute(data.coordinates.map(({ lat, lng }) => [lat, lng]));
         setStations(data.stations);
         setIsDrawing(false);
@@ -424,7 +541,7 @@ const RouteMap = () => {
         setShouldFitBounds(true);
 
          //start tomtom integration 
- const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe';
+
 
  let getRouteDistance = async (coordinates) => {
   try {
@@ -447,16 +564,33 @@ console.log(summary)
   }
 };    
 
- getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((result) => {
-   if (result) {
-     console.log('Distance:', result.distanceInMeters, 'meters');
-     console.log('Estimated time:', result.travelTimeInSeconds /60 , 'Min');
-     showAlert('info', `Distance: ${result.distanceInMeters} Meters - 
-                        Estimated time: ${parseInt(result.travelTimeInSeconds /60)} Min -
-                        trafficLengthInMeters : ${result.trafficLengthInMeters} Meters -
-                        trafficDelayInSeconds : ${parseInt(result.trafficDelayInSeconds /60) } Min `)
-   }
- });
+getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((result) => {
+  if (result) {
+    // Convert metrics
+    const distanceKm = (result.distanceInMeters / 1000).toFixed(1);
+    const travelTimeMin = Math.round(result.travelTimeInSeconds / 60);
+    const delayMin = Math.round(result.trafficDelayInSeconds / 60);
+    const congestionPercent = Math.round((result.trafficLengthInMeters / result.distanceInMeters) * 100);
+
+    // Build message
+    let message = `🚗 ROUTE SUMMARY 🚗\n` +
+                 `• Total distance: ${distanceKm} km\n` +
+                 `• Estimated time: ${travelTimeMin} min\n`;
+
+    // Traffic details
+    if (delayMin > 1 || congestionPercent > 10) {
+      message += `• Traffic delay: ${delayMin} min\n` +
+                 `• Congestion: ${congestionPercent}% of route\n`;
+      
+      if (delayMin > 15) message += "⚠️ Heavy traffic - consider alternatives";
+      else if (delayMin > 5) message += "⏳ Moderate traffic - add extra time";
+    } else {
+      message += "✅ Light traffic - smooth journey";
+    }
+
+    showAlert('info', message);
+  }
+});
 //end tomtom integration  
       } catch (err) {
         console.log(err);
@@ -475,7 +609,7 @@ console.log(summary)
     getData();
   }, [selectedRouteId]);
 
-  //get one trip  selected  from dropdown ,
+  //get one trip [detailed keys]  selected  from dropdown ,
   useEffect(() => {
     if (!selectedTripId) return;
 

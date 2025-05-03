@@ -246,6 +246,7 @@ setIsLoading(true)
             const { latitude, longitude } = pos.coords;
             const timestamp = new Date().toISOString();
             const point = { lat: latitude, lng: longitude, timestamp };
+console.log(point);
 
             setCoordinates((prev) => {
               // FIRST COORDINATE: Store but don't emit yet
