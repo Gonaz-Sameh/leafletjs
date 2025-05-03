@@ -72,7 +72,7 @@ const Logo = styled.img`
 // Styled Components
 const PanelContainer = styled.div`
   position: absolute;
-  top: 8px;
+  top: 15px;
   left: 50px;
   z-index: 1000;
   display: flex;
@@ -111,7 +111,7 @@ const ControlPanel = styled.div`
   animation: ${props => props.isOpen ? slideIn : slideOut} 0.3s forwards;
   transform-origin: left center;
     @media (max-width: 380px) {
-    width: 220px;
+    width: 200px;
 }
 `;
 
@@ -345,6 +345,13 @@ const RouteMap = () => {
   const [error, setError] = useState(null);
   const [isOpen, setIsOpen] = useState(true);
 
+  //gecode
+  const [locationInput, setLocationInput] = useState('');
+  const [geocodeCoordinates, setGeocodeCoordinates] = useState(null);
+  const [loadingGeocode, setLoadingGeocode] = useState(false);
+  const [errorGeocode, setErrorGeocode] = useState(null);
+
+
   // Reset `shouldFitBounds` after fitting is complete
   const handleFitBoundsComplete = () => {
     setShouldFitBounds(false);
@@ -365,112 +372,131 @@ const RouteMap = () => {
 
   const toRadians = (degrees) => degrees * (Math.PI / 180);
 
-const haversineDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371e3; // Earth radius in meters
-  const φ1 = toRadians(lat1);
-  const φ2 = toRadians(lat2);
-  const Δφ = toRadians(lat2 - lat1);
-  const Δλ = toRadians(lon2 - lon1);
-
-  const a = Math.sin(Δφ / 2) ** 2 +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  return R * c;
-};
-
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-const getWalkingRoute = async (from, to, apiKey) => {
-  const url = `https://api.tomtom.com/routing/1/calculateRoute/${from.lng},${from.lat}:${to.lng},${to.lat}/json?key=${apiKey}&travelMode=pedestrian`;
-
-  const res = await axios.get(url);
-  const data =  res.data;
-
-  if (data.routes?.[0]) {
-    const summary = data.routes[0].summary;
-    return {
-      distance: summary.lengthInMeters,
-      time: summary.travelTimeInSeconds
-    };
-  }
-  return null;
-};
-
-const findNearestStationEfficiently = async (userLat, userLng, apiKey, limit = 3) => {
-  try {
-    const response = await axios.get(`${backend_baseurl}/api/v1/stations`);
-    const stations = response.data;
-
-    if (!stations.length) return [];
-
-    // Step 1: Sort by Haversine distance
-    const sortedByHaversine = stations
-      .map(st => ({
-        ...st,
-        haversine: haversineDistance(userLat, userLng, st.lat, st.lng)
-      }))
-      .sort((a, b) => a.haversine - b.haversine);
-
-    const closestStations = sortedByHaversine.slice(0, Math.min(limit, sortedByHaversine.length));
-
-    // Step 2: Get walking route using TomTom API
-    const tomTomResults = [];
-
-    for (const station of closestStations) {
-      try {
-        const route = await getWalkingRoute(
-          { lat: userLat, lng: userLng },
-          { lat: station.lat, lng: station.lng },
-          apiKey
-        );
-
-        if (route) {
-          tomTomResults.push({
+  const haversineDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = toRadians(lat1);
+    const φ2 = toRadians(lat2);
+    const Δφ = toRadians(lat2 - lat1);
+    const Δλ = toRadians(lon2 - lon1);
+  
+    const a = Math.sin(Δφ / 2) ** 2 +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  
+    return R * c;
+  };
+  
+  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+  
+  const getWalkingRoute = async (from, to, apiKey) => {
+    try {
+      const url = `https://api.tomtom.com/routing/1/calculateRoute/${from.lat},${from.lng}:${to.lat},${to.lng}/json?key=${apiKey}`;
+      
+      const res = await axios.get(url);
+      const data = res.data;
+  
+      if (data.routes?.[0]) {
+        const summary = data.routes[0].summary;
+        return {
+          distance: summary.lengthInMeters,
+          time: summary.travelTimeInSeconds
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("TomTom API error:", error);
+      return null;
+    }
+  };
+  
+  const findNearestStations = async (userLat, userLng, apiKey) => {
+    try {
+      // Step 1: Get all stations from backend
+      const response = await axios.get(`${backend_baseurl}/api/v1/stations`);
+      const stations = response.data;
+  
+      if (!stations.length) return [];
+  
+      // Step 2: Calculate haversine distance for all stations and sort them
+      const stationsWithHaversine = stations.map(station => ({
+        ...station,
+        haversineDistance: haversineDistance(userLat, userLng, station.lat, station.lng)
+      })).sort((a, b) => a.haversineDistance - b.haversineDistance);
+  
+      // Step 3: Take top 3 closest by haversine (or less if not enough stations)
+      const topStations = stationsWithHaversine.slice(0, 3);
+  
+      // Step 4: Get accurate walking routes from TomTom for these top stations
+      const stationsWithWalkingInfo = [];
+      
+      for (const station of topStations) {
+        try {
+          const walkingRoute = await getWalkingRoute(
+            { lat: userLat, lng: userLng },
+            { lat: station.lat, lng: station.lng },
+            apiKey
+          );
+  
+          if (walkingRoute) {
+            stationsWithWalkingInfo.push({
+              ...station,
+              walkingDistance: walkingRoute.distance,
+              walkingTime: walkingRoute.time,
+              isAccurate: true
+            });
+          } else {
+            // If TomTom fails for this station, fall back to haversine
+            stationsWithWalkingInfo.push({
+              ...station,
+              walkingDistance: station.haversineDistance,
+              walkingTime: Math.round((station.haversineDistance / 1.4) * 1.3), // Estimated walking time (1.4m/s with 30% buffer)
+              isAccurate: false
+            });
+          }
+        } catch (error) {
+          console.error(`Error processing station ${station.name || station._id}:`, error);
+          // Fall back to haversine if TomTom fails
+          stationsWithWalkingInfo.push({
             ...station,
-            walkingDistance: route.distance,
-            walkingTime: route.time
+            walkingDistance: station.haversineDistance,
+            walkingTime: Math.round((station.haversineDistance / 1.4) * 1.3),
+            isAccurate: false
           });
         }
-      } catch (err) {
-        console.error("TomTom error for station:", station.name || station._id, err);
-        // Continue to next station
+  
+        await delay(1000); // Wait 1s between requests
       }
-
-      await delay(1000); // Wait 1s between requests
+  
+      // Step 5: Sort by walking time (ascending - shortest time first)
+      const sortedStations = stationsWithWalkingInfo.sort((a, b) => a.walkingTime - b.walkingTime);
+  
+      return sortedStations;
+  
+    } catch (error) {
+      console.error("Error in findNearestStations:", error);
+      return [];
     }
-
-    // Step 3: Return sorted by walking time
-    if (tomTomResults.length) {
-      return tomTomResults
-        .sort((a, b) => a.walkingTime - b.walkingTime)
-        .slice(0, 3);
-    } else {
-      // TomTom failed or returned nothing
-      console.warn("TomTom failed, falling back to Haversine.");
-      return closestStations.map(st => ({
-        ...st,
-        fallback: true,
-        haversineDistanceInMeters: st.haversine
-      }));
-    }
-
-  } catch (error) {
-    console.error("Error in finding stations:", error);
-    return [];
-  }
-};
-
-// Example usage in React
-useEffect(() => {
-  const getNearest = async () => {
-    const stations = await findNearestStationEfficiently(30.044710, 31.384037, TOMTOM_API_KEY);
-    console.log("Top 3 nearest stations (walking or fallback):", stations);
   };
+  useEffect(() => {
+    const fetchNearestStations = async () => {
+      try {
+        const userLat = 30.047130119453023;
+        const userLng = 31.383423483194452;
+        
+        const nearestStations = await findNearestStations(userLat, userLng, TOMTOM_API_KEY);
+        
+        console.log("Nearest stations:", nearestStations);
+        
+        // You can set this to your state here
+        // setStations(nearestStations);
+      } catch (error) {
+        console.error("Error fetching nearest stations:", error);
+      }
+    };
 
-  getNearest();
-}, []);
+    fetchNearestStations();
+  }, []);
 
 useEffect(() => {
   currentTripRef.current = { 
@@ -607,7 +633,7 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
 //end tomtom integration  
       } catch (err) {
         console.log(err);
-        showAlert('error', `Error loading selected route : ${err}`)
+        showAlert('error', `Error loadingGeocode selected route : ${err}`)
       }
 
       // Fetch trips for that route
@@ -851,7 +877,47 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
       setIsLoadingTraffic(false);
     }
   };
+  const handleGeocode = async () => {
+    if (!locationInput.trim()) {
+      setErrorGeocode('Please enter a location');
+      return;
+    }
 
+    setLoadingGeocode(true);
+    setErrorGeocode(null);
+
+    try {
+      const response = await axios.get(
+        `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(locationInput)}.json`,
+        {
+          params: {
+            key: TOMTOM_API_KEY,
+            limit: 1
+          }
+        }
+      );
+
+      if (response.data.results && response.data.results.length > 0) {
+        const { lat, lon } = response.data.results[0].position;
+        const newCoords = { latitude: lat, longitude: lon };
+        setGeocodeCoordinates(newCoords);
+        
+        // Fly to the new location if map is already initialized
+        if (mapRef.current) {
+          mapRef.current.flyTo([lat, lon], 15);
+        }
+      } else {
+        setErrorGeocode('Location not found');
+        setGeocodeCoordinates(null);
+      }
+    } catch (err) {
+      setErrorGeocode('Failed to geocode location');
+      console.error('Geocoding error:', err);
+      setGeocodeCoordinates(null);
+    } finally {
+      setLoadingGeocode(false);
+    }
+  };
   return (
     <>
       <AppContainer>
@@ -859,12 +925,57 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
           <Logo src="/logo.png" alt="Company Logo" />
           
         </Header>
+        <div style={{ 
+
+margin:" 10px 50px "
+       
+        }}>
+          <div style={{ display: 'flex', display:"flex",
+alignItems:"center",
+justifyContent:"center",marginBottom: '10px' }}>
+            <input
+              type="text"
+              value={locationInput}
+              onChange={(e) => setLocationInput(e.target.value)}
+              placeholder="Search for a location..."
+              style={{ 
+                flex: 1, 
+                padding: '8px',
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+              onKeyPress={(e) => e.key === 'Enter' && handleGeocode()}
+            />
+            <button 
+              onClick={handleGeocode}
+              disabled={loadingGeocode}
+              style={{ 
+                padding: '8px 16px',
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              {loadingGeocode ? 'Searching...' : 'Search'}
+            </button>
+          </div>
+
+          {errorGeocode && (
+            <div style={{ color: 'red', fontSize: '0.9em' }}>
+              {errorGeocode}
+            </div>
+          )}
+        </div>
         <MapStyledContainer>
-
-
+      
           <MapContainer
             ref={mapRef}
-            center={[30.0444, 31.2357]}
+            center={
+              geocodeCoordinates && geocodeCoordinates.latitude  && geocodeCoordinates.longitude ?
+              [geocodeCoordinates.latitude , geocodeCoordinates.longitude ]
+               :[30.0444, 31.2357]}
             zoom={13}
             style={{ height: "100%", width: "100%" }}
             scrollWheelZoom={!isDrawing}
