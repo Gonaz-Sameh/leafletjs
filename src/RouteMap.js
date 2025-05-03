@@ -279,6 +279,7 @@ const stationsIcon = createCustomIcon('black', 'S',26);
 const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24);
 const RouteMap = () => {
   const socketRef = useRef(null);
+  const currentTripRef = useRef({ routeId: null, tripId: null });
   const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
   const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe';
   const showAlert = (status = 'error', text = 'Someting Went Wrong.') => {
@@ -349,7 +350,7 @@ const RouteMap = () => {
     setShouldFitBounds(false);
   };
  
-  useEffect(() => {
+ /* useEffect(() => {
     const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
     console.log(socket);
     
@@ -360,7 +361,7 @@ const RouteMap = () => {
       }
     });
     return () => socket.disconnect();
-  }, [selectedRouteId, selectedTripId]);
+  }, [selectedRouteId, selectedTripId]);*/
 
   const toRadians = (degrees) => degrees * (Math.PI / 180);
 
@@ -471,8 +472,15 @@ useEffect(() => {
   getNearest();
 }, []);
 
-  
-  /*useEffect(() => {
+useEffect(() => {
+  currentTripRef.current = { 
+    routeId: selectedRouteId, 
+    tripId: selectedTripId 
+  };
+
+}, [selectedRouteId, selectedTripId]);
+  useEffect(() => {
+
     // Connect socket on component mount
     socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
 
@@ -480,8 +488,11 @@ useEffect(() => {
     // Listen to live bus updates
     const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
       console.log({ tripId, routeId, busId, lat, lng });
-      
+      //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
+      showAlert('error',`selectedRouteId ${selectedRouteId}`)
       if (routeId === selectedRouteId && tripId == selectedTripId) {
+       /* const current = currentTripRef.current;
+        if (routeId === current.routeId && tripId === current.tripId) {*/
         setBusPath([[lat, lng]]);
       }
     };
@@ -496,7 +507,7 @@ useEffect(() => {
         socketRef.current = null;
       }
     };
-  }, []);*/
+  }, []);
 
   //get routes [main keys] to select route from dropdown ,
   useEffect(() => {
@@ -844,6 +855,7 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
       <AppContainer>
         <Header>
           <Logo src="/logo.png" alt="Company Logo" />
+          
         </Header>
         <MapStyledContainer>
 
