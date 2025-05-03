@@ -489,10 +489,9 @@ useEffect(() => {
     const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
       console.log({ tripId, routeId, busId, lat, lng });
       //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
-      showAlert('error',`selectedRouteId ${selectedRouteId}`)
-      if (routeId === selectedRouteId && tripId == selectedTripId) {
-       /* const current = currentTripRef.current;
-        if (routeId === current.routeId && tripId === current.tripId) {*/
+     // if (routeId === selectedRouteId && tripId == selectedTripId) {
+        const current = currentTripRef.current;
+        if (routeId === current.routeId && tripId === current.tripId) {
         setBusPath([[lat, lng]]);
       }
     };
@@ -505,6 +504,9 @@ useEffect(() => {
         socketRef.current.off("busLocationUpdate", handleBusUpdate);
         socketRef.current.disconnect();
         socketRef.current = null;
+      }
+      if(currentTripRef.current){
+        currentTripRef.current ={ routeId: null, tripId: null }
       }
     };
   }, []);
