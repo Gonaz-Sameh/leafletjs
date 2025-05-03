@@ -437,7 +437,9 @@ const RouteMap = () => {
 console.log(summary)
     return {
       distanceInMeters: summary.lengthInMeters,
-      travelTimeInSeconds: summary.travelTimeInSeconds
+      travelTimeInSeconds: summary.travelTimeInSeconds,
+      trafficLengthInMeters:summary.trafficLengthInMeters,
+      trafficDelayInSeconds:summary.trafficDelayInSeconds
     };
   } catch (error) {
     console.error('TomTom Route API error:', error);
@@ -449,7 +451,10 @@ console.log(summary)
    if (result) {
      console.log('Distance:', result.distanceInMeters, 'meters');
      console.log('Estimated time:', result.travelTimeInSeconds /60 , 'Min');
-     showAlert('info', `Distance: ${result.distanceInMeters} Meters - Estimated time: ${result.travelTimeInSeconds /60} Min`)
+     showAlert('info', `Distance: ${result.distanceInMeters} Meters - 
+                        Estimated time: ${parseInt(result.travelTimeInSeconds /60)} Min -
+                        trafficLengthInMeters : ${result.trafficLengthInMeters} Meters -
+                        trafficDelayInSeconds : ${parseInt(result.trafficDelayInSeconds /60) } Min `)
    }
  });
 //end tomtom integration  
