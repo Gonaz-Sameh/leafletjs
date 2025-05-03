@@ -256,11 +256,11 @@ const SwalStyles = createGlobalStyle`
     }
   }
 `;
-// Socket connection
-const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
+// Socket connection here wrong becuse its effect by other components 
+//const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
 // Custom icons
-const createCustomIcon = (color, letter, borderColor = 'white') => new L.DivIcon({
+const createCustomIcon = (color, letter,iconSize, borderColor = 'white') => new L.DivIcon({
   html: `
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
       <circle cx="12" cy="12" r="10" fill="${color}" stroke="${borderColor}" stroke-width="2"/>
@@ -268,16 +268,19 @@ const createCustomIcon = (color, letter, borderColor = 'white') => new L.DivIcon
     </svg>
   `,
   className: "",
-  iconSize: [24, 24],
+  iconSize: [iconSize, iconSize],
   iconAnchor: [12, 12]
 });
 
-const startIcon = createCustomIcon('#2ecc71', 'S');
-const endIcon = createCustomIcon('#e74c3c', 'E');
-const busLiveIcon = createCustomIcon('#3498db', 'B');
-const stationsIcon = createCustomIcon('#9b59b6', 'S');
-const busOfflineIcon = createCustomIcon('#95a5a6', 'B');
+const startIcon = createCustomIcon('#00B0F0', 'S',25);
+const endIcon = createCustomIcon('#00B0F0', 'E',25);
+const busLiveIcon = createCustomIcon('green', 'B',28);
+const stationsIcon = createCustomIcon('black', 'S',26);
+const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24);
 const RouteMap = () => {
+  const socketRef = useRef(null);
+  const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
+
   const showAlert = (status = 'error', text = 'Someting Went Wrong.') => {
     Swal.fire({
       //title: 'Alert',
@@ -294,8 +297,8 @@ const RouteMap = () => {
   // Color scheme
   const colors = {
     plannedRoute: '#3388ff',
-    activeTrip: '#ff7800',
-    completedTrip: '#555',
+    //activeTrip: '#555',
+    completedTrip: '#ff7800',
     liveBus: '#e53e3e',
     offlineBus: '#718096',
     station: '#38a169'
@@ -322,7 +325,7 @@ const RouteMap = () => {
   const [selectedRouteId, setSelectedRouteId] = useState(null);
   const [isNewRoute, setIsNewRoute] = useState(true);
 
-  const [busPath, setBusPath] = useState([]); // 🔴 ADD
+  const [busPath, setBusPath] = useState([]); 
 
   const [trips, setTrips] = useState([]);
   const [selectedTripId, setSelectedTripId] = useState(null);
@@ -345,22 +348,40 @@ const RouteMap = () => {
   const handleFitBoundsComplete = () => {
     setShouldFitBounds(false);
   };
-  const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
-
-  // 🔴 ADD - Setup socket connection
-  useEffect(() => {
-
-    //alert("dd")
+ 
+  /*useEffect(() => {
+    const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
     socket.on("busLocationUpdate", ({ tripId, routeId, busId, lat, lng }) => {
       if (routeId === selectedRouteId && tripId == selectedTripId) {
-
-        // ✅ Only update marker position
         setBusPath([[lat, lng]]);
       }
     });
-
     return () => socket.disconnect();
-  }, [selectedRouteId, selectedTripId]);
+  }, [selectedRouteId, selectedTripId]);*/
+
+ 
+
+  useEffect(() => {
+    // Connect socket on component mount
+    socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
+    // Listen to live bus updates
+    const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
+      if (routeId === selectedRouteId && tripId == selectedTripId) {
+        setBusPath([[lat, lng]]);
+      }
+    };
+
+    socketRef.current.on("busLocationUpdate", handleBusUpdate);
+
+    return () => {
+      // Clean up listeners and connection on unmount
+      if (socketRef.current) {
+        socketRef.current.off("busLocationUpdate", handleBusUpdate);
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
 
   //get routes to select route from dropdown ,
   useEffect(() => {
@@ -401,6 +422,36 @@ const RouteMap = () => {
         setIsDrawing(false);
         setIsNewRoute(false);
         setShouldFitBounds(true);
+
+         //start tomtom integration 
+ const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe';
+
+ let getRouteDistance = async (coordinates) => {
+  try {
+    // Coordinates must be in the format: [ [lon1, lat1], [lon2, lat2], ... ]
+    const formattedCoords = coordinates.map(coord => coord.join(',')).join(':');
+    const url = `https://api.tomtom.com/routing/1/calculateRoute/${formattedCoords}/json?key=${TOMTOM_API_KEY}&traffic=true`;
+
+    const response = await axios.get(url);
+    const summary = response.data.routes[0].summary;
+console.log(summary)
+    return {
+      distanceInMeters: summary.lengthInMeters,
+      travelTimeInSeconds: summary.travelTimeInSeconds
+    };
+  } catch (error) {
+    console.error('TomTom Route API error:', error);
+    return null;
+  }
+};    
+
+ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((result) => {
+   if (result) {
+     console.log('Distance:', result.distanceInMeters, 'meters');
+     console.log('Estimated time:', result.travelTimeInSeconds /60 , 'Min');
+   }
+ });
+//end tomtom integration  
       } catch (err) {
         console.log(err);
         showAlert('error', `Error loading selected route : ${err}`)
@@ -697,7 +748,7 @@ const RouteMap = () => {
             {tripPath.length > 1 && (
               <Polyline
                 positions={tripPath}
-                color={colors.activeTrip}
+                color={colors.completedTrip}
                 weight={5}
                 opacity={0.8}
                 dashArray={selectedTripId ? undefined : "5, 5"} // Dashed for completed trips

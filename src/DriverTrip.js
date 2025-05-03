@@ -350,6 +350,13 @@ setIsLoading(true)
           },
           (error) => {
             console.error("Location error:", error);
+            if(error.code === error.PERMISSION_DENIED) {
+              showAlert('warning', 'Trip Started But [Location Permission Denied] Please Enable GPS access To Get All System Features .');
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              showAlert('warning', 'Location Position Unavailable. Please Check Your GPS Signal.');
+            } else {
+              showAlert('warning', 'Unable To Retrieve Location.');
+            }
           },
           { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
         );
