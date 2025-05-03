@@ -111,7 +111,7 @@ const ControlPanel = styled.div`
   animation: ${props => props.isOpen ? slideIn : slideOut} 0.3s forwards;
   transform-origin: left center;
     @media (max-width: 380px) {
-    width: 200px;
+    width: 220px;
 }
 `;
 
