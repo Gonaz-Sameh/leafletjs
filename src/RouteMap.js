@@ -72,7 +72,7 @@ const Logo = styled.img`
 // Styled Components
 const PanelContainer = styled.div`
   position: absolute;
-  top: 15px;
+  top: 220px;
   left: 50px;
   z-index: 1000;
   display: flex;
@@ -281,7 +281,9 @@ const RouteMap = () => {
   const socketRef = useRef(null);
   const currentTripRef = useRef({ routeId: null, tripId: null });
   const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
-  const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe';
+  const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe'; //mosco
+  const LOCATIONIQ_API_KEY='pk.430e64a0289ab733e075ea2f460c45f8';//mosco
+  const OPENROUTESERVICE_API_KEY ="5b3ce3597851110001cf62480f88fa10836b4c6990030f5767fb9d71"; //mosco   
   const showAlert = (status = 'error', text = 'Someting Went Wrong.') => {
     Swal.fire({
       //title: 'Alert',
@@ -478,7 +480,7 @@ const RouteMap = () => {
       return [];
     }
   };
-  useEffect(() => {
+ /* useEffect(() => {
     const fetchNearestStations = async () => {
       try {
         const userLat = 30.047130119453023;
@@ -496,7 +498,7 @@ const RouteMap = () => {
     };
 
     fetchNearestStations();
-  }, []);
+  }, []);*/
 
 useEffect(() => {
   currentTripRef.current = { 
@@ -877,97 +879,579 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
       setIsLoadingTraffic(false);
     }
   };
-  const handleGeocode = async () => {
-    if (!locationInput.trim()) {
-      setErrorGeocode('Please enter a location');
+// State for tracking which service is being used
+const [currentService, setCurrentService] = useState('LocationIQ');
+
+const handleGeocode = async () => {
+  if (!locationInput.trim()) {
+    setErrorGeocode('Please enter a location');
+    return;
+  }
+
+  setLoadingGeocode(true);
+  setErrorGeocode(null);
+
+  // Try LocationIQ first
+  try {
+    const response = await axios.get(
+      `https://us1.locationiq.com/v1/search.php`,
+      {
+        params: {
+          key: LOCATIONIQ_API_KEY,
+          q: locationInput,
+          format: 'json',
+          limit: 1
+        }
+      }
+    );
+
+    if (response.data && response.data.length > 0) {
+      const { lat, lon } = response.data[0];
+      const newCoords = { latitude: lat, longitude: lon };
+      setGeocodeCoordinates(newCoords);
+      setCurrentService('LocationIQ');
+      
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lon], 15);
+      }
+      setLoadingGeocode(false);
       return;
     }
+  } catch (err) {
+    console.log('LocationIQ geocoding failed, trying TomTom...');
+  }
 
-    setLoadingGeocode(true);
-    setErrorGeocode(null);
-
-    try {
-      const response = await axios.get(
-        `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(locationInput)}.json`,
-        {
-          params: {
-            key: TOMTOM_API_KEY,
-            limit: 1
-          }
+  // Fallback to TomTom if LocationIQ fails
+  try {
+    const response = await axios.get(
+      `https://api.tomtom.com/search/2/geocode/${encodeURIComponent(locationInput)}.json`,
+      {
+        params: {
+          key: TOMTOM_API_KEY,
+          limit: 1
         }
-      );
-
-      if (response.data.results && response.data.results.length > 0) {
-        const { lat, lon } = response.data.results[0].position;
-        const newCoords = { latitude: lat, longitude: lon };
-        setGeocodeCoordinates(newCoords);
-        
-        // Fly to the new location if map is already initialized
-        if (mapRef.current) {
-          mapRef.current.flyTo([lat, lon], 15);
-        }
-      } else {
-        setErrorGeocode('Location not found');
-        setGeocodeCoordinates(null);
       }
-    } catch (err) {
-      setErrorGeocode('Failed to geocode location');
-      console.error('Geocoding error:', err);
-      setGeocodeCoordinates(null);
-    } finally {
+    );
+
+    if (response.data.results && response.data.results.length > 0) {
+      const { lat, lon } = response.data.results[0].position;
+      const newCoords = { latitude: lat, longitude: lon };
+      setGeocodeCoordinates(newCoords);
+      setCurrentService('TomTom');
+      
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lon], 15);
+      }
       setLoadingGeocode(false);
+      return;
+    }
+  } catch (err) {
+    console.log('TomTom geocoding failed, trying OpenRouteService...');
+  }
+
+  // Final fallback to OpenRouteService
+  try {
+    const response = await axios.get(
+      `https://api.openrouteservice.org/geocode/search`,
+      {
+        params: {
+          api_key: OPENROUTESERVICE_API_KEY,
+          text: locationInput,
+          size: 1
+        },
+        headers: {
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
+        }
+      }
+    );
+
+    if (response.data.features && response.data.features.length > 0) {
+      const [lon, lat] = response.data.features[0].geometry.coordinates;
+      const newCoords = { latitude: lat, longitude: lon };
+      setGeocodeCoordinates(newCoords);
+      setCurrentService('OpenRouteService');
+      
+      if (mapRef.current) {
+        mapRef.current.flyTo([lat, lon], 15);
+      }
+      setLoadingGeocode(false);
+      return;
+    }
+  } catch (err) {
+    console.error('All geocoding services failed:', err);
+  }
+
+  // If all services fail
+  setErrorGeocode('Failed to geocode location (all services tried)');
+  setGeocodeCoordinates(null);
+  setLoadingGeocode(false);
+};
+
+const [suggestions, setSuggestions] = useState([]);
+const [showSuggestions, setShowSuggestions] = useState(false);
+
+const handleAutocomplete = async (query) => {
+  if (!query.trim()) {
+    setSuggestions([]);
+    return;
+  }
+
+  // Try LocationIQ first
+  try {
+    const response = await axios.get(
+      `https://us1.locationiq.com/v1/autocomplete.php`,
+      {
+        params: {
+          key: LOCATIONIQ_API_KEY,
+          q: query,
+          format: 'json',
+          limit: 5
+        }
+      }
+    );
+
+    setSuggestions(response.data || []);
+    setShowSuggestions(true);
+    setCurrentService('LocationIQ');
+    return;
+  } catch (err) {
+    console.log('LocationIQ autocomplete failed, trying TomTom...');
+  }
+
+  // Fallback to TomTom
+  try {
+    const response = await axios.get(
+      `https://api.tomtom.com/search/2/search/${encodeURIComponent(query)}.json`,
+      {
+        params: {
+          key: TOMTOM_API_KEY,
+          limit: 5,
+          typeahead: true
+        }
+      }
+    );
+
+    const tomtomSuggestions = response.data.results.map(result => ({
+      display_name: result.address.freeformAddress,
+      lat: result.position.lat,
+      lon: result.position.lon
+    }));
+
+    setSuggestions(tomtomSuggestions);
+    setShowSuggestions(true);
+    setCurrentService('TomTom');
+    return;
+  } catch (err) {
+    console.log('TomTom autocomplete failed, trying OpenRouteService...');
+  }
+
+  // Final fallback to OpenRouteService
+  try {
+    const response = await axios.get(
+      `https://api.openrouteservice.org/geocode/autocomplete`,
+      {
+        params: {
+          api_key: OPENROUTESERVICE_API_KEY,
+          text: query,
+          size: 5
+        },
+        headers: {
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8'
+        }
+      }
+    );
+
+    const orsSuggestions = response.data.features.map(feature => ({
+      display_name: feature.properties.label,
+      lat: feature.geometry.coordinates[1],
+      lon: feature.geometry.coordinates[0]
+    }));
+
+    setSuggestions(orsSuggestions);
+    setShowSuggestions(true);
+    setCurrentService('OpenRouteService');
+  } catch (err) {
+    console.error('All autocomplete services failed:', err);
+    setSuggestions([]);
+  }
+};
+
+const [allRoutesStations, setAllRoutesStations] = useState([]);
+const [nearestStation, setNearestStation] = useState(null);
+const [currentNearestService, setCurrentNearestService] = useState('OpenRouteService');
+
+// Fetch stations on component mount
+useEffect(() => {
+  const fetchStations = async () => {
+    try {
+      const response = await axios.get(`${backend_baseurl}/api/v1/stations`);
+      setAllRoutesStations(response.data);
+    } catch (err) {
+      console.error('Failed to fetch stations:', err);
     }
   };
+ fetchStations();
+}, []);
+// Utility function to calculate distance between two points in km
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+};
+const findNearestStation = async (lat, lng) => {
+  if (!allRoutesStations || allRoutesStations.length === 0) {
+    throw new Error('No all Routes Stations available');
+  }
+
+  // First, find 3 nearest stations by straight-line distance
+  const stationsWithDistance = allRoutesStations.map(station => ({
+    station,
+    distance: calculateDistance(lat, lng, station.lat, station.lng)
+  })).sort((a, b) => a.distance - b.distance).slice(0, 3);
+
+  console.log("haversine",stationsWithDistance);
+  /*showAlert('info', `HAV: ${JSON.stringify({
+    station: stationsWithDistance[0].station.name,
+    distance: stationsWithDistance[0].distance ,
+    duration: (stationsWithDistance[0].distance / 5 * 3600) / 60
+  })}`)*/
+
+  let result = null;
+  let serviceUsed = null;
+
+  // Try OpenRouteService first (best for walking)
+  /*try {
+    const response = await axios.post(
+      `https://api.openrouteservice.org/v2/matrix/foot-walking`,
+      {
+        locations: [
+          [lng, lat], // Start point (current location)
+          ...stationsWithDistance.map(({ station }) => [station.lng, station.lat]) // 3 nearest stations
+        ],
+        metrics: ['distance', 'duration'],
+        units: 'km'
+      },
+      {
+        headers: {
+          'Authorization': OPENROUTESERVICE_API_KEY,
+          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data.distances && response.data.durations) {
+      console.log("OpenRouteService",response.data);
+      // Find the station with minimum walking distance
+      let minIndex = 0;
+      let minDistance = response.data.distances[0][1]; // Distance to first station
+      
+      for (let i = 1; i < stationsWithDistance.length; i++) {
+        if (response.data.distances[0][i+1] < minDistance) {
+          minDistance = response.data.distances[0][i+1];
+          minIndex = i;
+        }
+      }
+
+      result = {
+        station: stationsWithDistance[minIndex].station,
+        distance: response.data.distances[0][minIndex+1],
+        duration: response.data.durations[0][minIndex+1], // in seconds
+        service: 'OpenRouteService'
+      };
+      //console.log("OpenRouteService : ",result);
+      serviceUsed = 'OpenRouteService';
+    }
+  } catch (err) {
+    console.log('OpenRouteService failed, trying TomTom...');
+  }*/
+
+  // Fallback to TomTom if OpenRouteService fails
+ /* if (!result) {
+    try {
+      // Try walking routes for each of the 3 nearest stations until we get a result
+      for (const { station } of stationsWithDistance) {
+        try {
+          const response = await axios.get(
+            `https://api.tomtom.com/routing/1/calculateRoute/${lat},${lng}:${station.lat},${station.lng}/json`,
+            {
+              params: {
+                key: TOMTOM_API_KEY,
+                travelMode: 'pedestrian',
+                routeType: 'fastest'
+              }
+            }
+          );
+
+          if (response.data.routes && response.data.routes.length > 0) {
+            const route = response.data.routes[0];
+            result = {
+              station,
+              distance: route.summary.lengthInMeters / 1000, // convert to km
+              duration: route.summary.travelTimeInSeconds,
+              service: 'TomTom'
+            };
+            serviceUsed = 'TomTom';
+            break; // Use the first successful response
+          }
+        } catch (err) {
+          console.log(`TomTom failed for station ${station.name}, trying next...`);
+        }
+      }
+    } catch (err) {
+      console.log('All TomTom attempts failed, falling back to straight-line distance...');
+    }
+  }*/
+
+  // Final fallback - use the nearest by straight-line distance with estimated walking time
+  if (!result) {
+    const nearest = stationsWithDistance[0];
+    // Estimate walking time: 5 km/h walking speed (1.39 m/s)
+    const estimatedDuration = nearest.distance / 5 * 3600; // in seconds
+    
+    result = {
+      station: nearest.station,
+      distance: nearest.distance,
+      duration: estimatedDuration,
+      service: 'Straight-line distance (estimated)'
+    };
+    serviceUsed = 'Straight-line distance (estimated)';
+  }
+
+  return {
+    ...result,
+    serviceUsed,
+    isEstimated: result.service.includes('estimated') || result.service.includes('Straight-line')
+  };
+};
+useEffect(() => {
+  let getNearestStation = async()=>{
+   // Now find nearest station with walking details
+   try {
+   /* const userLat = 30.047130119453023;
+    const userLng = 31.383423483194452;*/
+    const nearestStationResult = await findNearestStation(geocodeCoordinates.latitude,geocodeCoordinates.longitude);
+    setNearestStation(nearestStationResult);
+    setCurrentNearestService(`${nearestStationResult.serviceUsed}`);
+    
+  
+  } catch (err) {
+    showAlert('error', `Error finding nearest station ${err}`)
+    console.error('Error finding nearest station:', err);
+  }
+}
+  
+geocodeCoordinates  && getNearestStation()
+console.log("geocodeCoordinates : ",geocodeCoordinates);
+
+}, [geocodeCoordinates]);
+const getUserLocation = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser'));
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          reject(error);
+        }
+      );
+    }
+  });
+};
   return (
     <>
       <AppContainer>
         <Header>
           <Logo src="/logo.png" alt="Company Logo" />
-          
+          <h6>*Our System Is Until Now Has More Than %80 accuracy* </h6>
         </Header>
         <div style={{ 
+  margin: "10px 50px",
+  position: 'relative'
+}}>
+  {nearestStation && (
+  <div style={{
+    marginTop: '15px',
+    padding: '12px',
+    backgroundColor: '#f8f9fa',
+    borderRadius: '8px',
+    border: '1px solid #dee2e6'
+  }}>
+    <h4 style={{ margin: '0 0 8px 0' }}>Nearest Station (Walking)</h4>
+    <div><strong>Name:</strong> {nearestStation.station.name}</div>
+    <div><strong>Distance:</strong> {nearestStation.distance.toFixed(2)} km</div>
+    {nearestStation.duration && (
+      <div>
+        <strong>Walking Time:</strong> 
+        {Math.floor(nearestStation.duration / 60)} minutes {nearestStation.duration % 60} seconds
+      </div>
+    )}
+    <div>
+      <strong>Location:</strong> 
+      {nearestStation.station.lat.toFixed(6)}, {nearestStation.station.lng.toFixed(6)}
+    </div>
+    <div style={{ fontSize: '0.8em', color: '#666', marginTop: '8px' }}>
+      Routing via: {nearestStation.serviceUsed}
+    </div>
+  </div>
+)}
+   <button 
+  onClick={async () => {
+    try {
+      const location = await getUserLocation();
+      const nearestStationResult = await findNearestStation(location.lat,location.lng);
+      setNearestStation(nearestStationResult);
+      setCurrentNearestService(`${nearestStationResult.serviceUsed}`);
+      
+    } catch (error) {
+      showAlert('error', `${error}`)
+      console.error('Error:', error);
+    }
+   
+  }}
+  style={{
+    padding: '10px 15px',
+    backgroundColor: '#4285f4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    margin: '10px 0'
+  }}
+>
+  <span>📍</span>
+  Get My Location
+</button>
+  {/* Service indicator */}
+  <div style={{ 
+    textAlign: 'center',
+    fontSize: '0.8em',
+    color: '#666',
+    marginBottom: '5px'
+  }}>
+    Powered by: {currentService}
+  </div>
 
-margin:" 10px 50px "
-       
-        }}>
-          <div style={{ display: 'flex', display:"flex",
-alignItems:"center",
-justifyContent:"center",marginBottom: '10px' }}>
-            <input
-              type="text"
-              value={locationInput}
-              onChange={(e) => setLocationInput(e.target.value)}
-              placeholder="Search for a location..."
-              style={{ 
-                flex: 1, 
-                padding: '8px',
-                border: '1px solid #ddd',
-                borderRadius: '4px'
-              }}
-              onKeyPress={(e) => e.key === 'Enter' && handleGeocode()}
-            />
-            <button 
-              onClick={handleGeocode}
-              disabled={loadingGeocode}
-              style={{ 
-                padding: '8px 16px',
-                background: '#4CAF50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              {loadingGeocode ? 'Searching...' : 'Search'}
-            </button>
-          </div>
+  <div style={{ 
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+border:"1px solid lightgray",
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    borderRadius: '8px',
 
-          {errorGeocode && (
-            <div style={{ color: 'red', fontSize: '0.9em' }}>
-              {errorGeocode}
-            </div>
-          )}
+  }}>
+ 
+    <input
+      type="text"
+      value={locationInput}
+      onChange={(e) => {
+        setLocationInput(e.target.value);
+        handleAutocomplete(e.target.value);
+      }}
+      placeholder="Search for Your Current location..."
+      style={{ 
+        flex: 1, 
+        padding: '12px 16px',
+        border: 'none',
+        outline: 'none',
+        fontSize: '16px'
+      }}
+      onKeyPress={(e) => e.key === 'Enter' && handleGeocode()}
+      onFocus={() => setShowSuggestions(true)}
+      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+    />
+    <button 
+      onClick={handleGeocode}
+      disabled={loadingGeocode}
+      style={{ 
+        padding: '12px 20px',
+        background: '#4CAF50',
+        color: 'white',
+        border: 'none',
+        cursor: 'pointer',
+        fontSize: '16px',
+        transition: 'background 0.3s',
+        ':hover': {
+          background: '#45a049'
+        }
+      }}
+    >
+      {loadingGeocode ? 'Searching...' : 'Search'}
+    </button>
+  </div>
+
+  {/* Autocomplete suggestions dropdown */}
+  {showSuggestions && suggestions.length > 0 && (
+    <div style={{
+      position: 'absolute',
+      top: 'calc(100% + 5px)',
+      left: 0,
+      right: 0,
+      zIndex: 1000,
+      backgroundColor: 'white',
+      border: '1px solid #ddd',
+      borderRadius: '8px',
+      boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+      maxHeight: '300px',
+      overflowY: 'auto'
+    }}>
+      {suggestions.map((suggestion, index) => (
+        <div
+          key={index}
+          style={{
+            padding: '10px 16px',
+            cursor: 'pointer',
+            borderBottom: '1px solid #eee',
+            ':hover': {
+              backgroundColor: '#f5f5f5'
+            }
+          }}
+          onClick={() => {
+            setLocationInput(suggestion.display_name);
+            setGeocodeCoordinates({
+              latitude: suggestion.lat,
+              longitude: suggestion.lon
+            });
+            setShowSuggestions(false);
+            if (mapRef.current) {
+              mapRef.current.flyTo([suggestion.lat, suggestion.lon], 15);
+            }
+          }}
+        >
+          {suggestion.display_name}
         </div>
+      ))}
+    </div>
+  )}
+
+  {errorGeocode && (
+    <div style={{ 
+      color: 'red', 
+      fontSize: '0.9em',
+      padding: '8px',
+      textAlign: 'center'
+    }}>
+      {errorGeocode}
+    </div>
+  )}
+</div>
         <MapStyledContainer>
       
           <MapContainer
