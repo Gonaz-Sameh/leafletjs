@@ -17,7 +17,7 @@ import axios from "axios";
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
 import { FaLayerGroup, FaTrashAlt, FaCheck, FaBus, FaExpand, FaChevronLeft, FaChevronRight, FaMapMarkerAlt, FaRoute, FaTrash, FaSave, FaPlus, FaClock, FaTrafficLight } from 'react-icons/fa';
-
+import simplify from 'simplify-js';
 // Animations
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(-20px); }
@@ -72,7 +72,7 @@ const Logo = styled.img`
 // Styled Components
 const PanelContainer = styled.div`
   position: absolute;
-  top: 220px;
+  top: 20px;
   left: 50px;
   z-index: 1000;
   display: flex;
@@ -260,23 +260,23 @@ const SwalStyles = createGlobalStyle`
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
 // Custom icons
-const createCustomIcon = (color, letter,iconSize, borderColor = 'white') => new L.DivIcon({
+const createCustomIcon = (color, letter,iconSize, iconAnchorSize ,strokeWidth=2) => new L.DivIcon({
   html: `
     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="${color}" stroke="${borderColor}" stroke-width="2"/>
+      <circle cx="12" cy="12" r="10" fill="${color}" stroke="${'white'}" stroke-width="${strokeWidth}"/>
       <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-weight="bold">${letter}</text>
     </svg>
   `,
   className: "",
   iconSize: [iconSize, iconSize],
-  iconAnchor: [12, 12]
+  iconAnchor: [iconAnchorSize, iconAnchorSize]
 });
 
-const startIcon = createCustomIcon('#00B0F0', 'S',25);
-const endIcon = createCustomIcon('#00B0F0', 'E',25);
-const busLiveIcon = createCustomIcon('green', 'B',28);
-const stationsIcon = createCustomIcon('black', 'S',26);
-const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24);
+const startIcon = createCustomIcon('#00B0F0', 'S',25,12);
+const endIcon = createCustomIcon('#00B0F0', 'E',25,12);
+const  busLiveIcon= createCustomIcon('green', 'B',40,23,4);
+const stationsIcon = createCustomIcon('black', 'S',26,12);
+const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24,12);
 const RouteMap = () => {
   const socketRef = useRef(null);
   const currentTripRef = useRef({ routeId: null, tripId: null });
@@ -659,16 +659,95 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
     setTripPath([]);
     setTripCoordinatesTimestamp([]);
     setTripLatestLiveCoordinates([])
+   
 
+    const simplifyPath = (path, tolerance = 0.0001, highQuality = false) => {
+      // Convert to format simplify-js expects
+      const points = path.map(p => ({x: p[1], y: p[0]})); // Note: lon,lat format
+      
+      // Simplify the points
+      const simplified = simplify(points, tolerance, highQuality);
+      
+      // Convert back to Leaflet format
+      return simplified.map(p => [p.y, p.x]);
+    };
+    const smoothPath = (path, iterations = 2) => {
+      if (path.length < 3) return path;
+      
+      let smoothed = [...path];
+      
+      for (let i = 0; i < iterations; i++) {
+        const newPath = [];
+        
+        // Add first point
+        newPath.push(smoothed[0]);
+        
+        for (let j = 1; j < smoothed.length; j++) {
+          const p0 = smoothed[j - 1];
+          const p1 = smoothed[j];
+          
+          // Calculate 1/4 and 3/4 points between p0 and p1
+          const q0 = [
+            p0[0] * 0.75 + p1[0] * 0.25,
+            p0[1] * 0.75 + p1[1] * 0.25
+          ];
+          
+          const q1 = [
+            p0[0] * 0.25 + p1[0] * 0.75,
+            p0[1] * 0.25 + p1[1] * 0.75
+          ];
+          
+          newPath.push(q0, q1);
+        }
+        
+        // Add last point
+        newPath.push(smoothed[smoothed.length - 1]);
+        smoothed = newPath;
+      }
+      
+      return smoothed;
+    };
+    const removeOutliers = (path, maxDistance = 0.01) => {
+      if (path.length < 3) return path;
+      
+      const cleaned = [path[0]];
+      
+      for (let i = 1; i < path.length - 1; i++) {
+        const prev = path[i - 1];
+        const current = path[i];
+        const next = path[i + 1];
+        
+        // Calculate distance between points
+        const d1 = Math.sqrt(Math.pow(current[0] - prev[0], 2) + Math.pow(current[1] - prev[1], 2));
+        const d2 = Math.sqrt(Math.pow(next[0] - current[0], 2) + Math.pow(next[1] - current[1], 2));
+        
+        if (d1 < maxDistance && d2 < maxDistance) {
+          cleaned.push(current);
+        }
+      }
+      
+      cleaned.push(path[path.length - 1]);
+      return cleaned;
+    };
     let getSelectedTripDetails = async () => {
       try {
         const res = await axios.get(`${backend_baseurl}/api/v1/trips/${selectedTripId}`)
         let data = res.data
         // Convert trip coordinates to Leaflet format: [[lat, lng], ...]
         const path = data.coordinates.map((point) => [point.lat, point.lng]);
+        
+        console.log("path before : " , path);
+        
+        // simplifyPath(path, 0.0005);
+        // smoothPath(path, 2);
+
+       /* setTripPath(simplifyPath(path, 0.000008));
+        console.log("path after : " , simplifyPath(path, 0.000008));*/
+      
         setTripPath(path);
         const timestamp = data.coordinates.map((t) => [t.timestamp]);
         setTripCoordinatesTimestamp(timestamp);
+     
         let latestLiveCoordinates = data.latestLiveCoordinates;
         if (latestLiveCoordinates && latestLiveCoordinates.lat && latestLiveCoordinates.lng) {
           setTripLatestLiveCoordinates([[latestLiveCoordinates.lat, latestLiveCoordinates.lng]])
@@ -1115,24 +1194,19 @@ const findNearestStation = async (lat, lng) => {
     distance: calculateDistance(lat, lng, station.lat, station.lng)
   })).sort((a, b) => a.distance - b.distance).slice(0, 3);
 
-  console.log("haversine",stationsWithDistance);
-  /*showAlert('info', `HAV: ${JSON.stringify({
-    station: stationsWithDistance[0].station.name,
-    distance: stationsWithDistance[0].distance ,
-    duration: (stationsWithDistance[0].distance / 5 * 3600) / 60
-  })}`)*/
-
   let result = null;
   let serviceUsed = null;
+  let routePolyline = null;
 
   // Try OpenRouteService first (best for walking)
-  /*try {
-    const response = await axios.post(
-      `https://api.openrouteservice.org/v2/matrix/foot-walking`,
+  try {
+    // First get the nearest station from matrix API
+    const matrixResponse = await axios.post(
+      `https://api.openrouteservice.org/v2/matrix/foot-walkingن`,
       {
         locations: [
-          [lng, lat], // Start point (current location)
-          ...stationsWithDistance.map(({ station }) => [station.lng, station.lat]) // 3 nearest stations
+          [lng, lat],
+          ...stationsWithDistance.map(({ station }) => [station.lng, station.lat])
         ],
         metrics: ['distance', 'duration'],
         units: 'km'
@@ -1140,42 +1214,54 @@ const findNearestStation = async (lat, lng) => {
       {
         headers: {
           'Authorization': OPENROUTESERVICE_API_KEY,
-          'Accept': 'application/json, application/geo+json, application/gpx+xml, img/png; charset=utf-8',
           'Content-Type': 'application/json'
         }
       }
     );
 
-    if (response.data.distances && response.data.durations) {
-      console.log("OpenRouteService",response.data);
-      // Find the station with minimum walking distance
+    if (matrixResponse.data.distances) {
+      // Find nearest station index
       let minIndex = 0;
-      let minDistance = response.data.distances[0][1]; // Distance to first station
-      
       for (let i = 1; i < stationsWithDistance.length; i++) {
-        if (response.data.distances[0][i+1] < minDistance) {
-          minDistance = response.data.distances[0][i+1];
+        if (matrixResponse.data.distances[0][i+1] < matrixResponse.data.distances[0][minIndex+1]) {
           minIndex = i;
         }
       }
 
-      result = {
-        station: stationsWithDistance[minIndex].station,
-        distance: response.data.distances[0][minIndex+1],
-        duration: response.data.durations[0][minIndex+1], // in seconds
-        service: 'OpenRouteService'
-      };
-      //console.log("OpenRouteService : ",result);
-      serviceUsed = 'OpenRouteService';
+      // Now get the route polyline
+      const directionsResponse = await axios.get(
+        `https://api.openrouteservice.org/v2/directions/foot-walking`,
+        {
+          params: {
+            api_key: OPENROUTESERVICE_API_KEY,
+            start: `${lng},${lat}`,
+            end: `${stationsWithDistance[minIndex].station.lng},${stationsWithDistance[minIndex].station.lat}`
+          },
+          headers: {
+            'Accept': 'application/json, application/geo+json'
+          }
+        }
+      );
+
+      if (directionsResponse.data.features && directionsResponse.data.features.length > 0) {
+        routePolyline = directionsResponse.data.features[0].geometry;
+        result = {
+          station: stationsWithDistance[minIndex].station,
+          distance: matrixResponse.data.distances[0][minIndex+1],
+          duration: matrixResponse.data.durations[0][minIndex+1],
+          service: 'OpenRouteService',
+          routePolyline
+        };
+        serviceUsed = 'OpenRouteService';
+      }
     }
   } catch (err) {
-    console.log('OpenRouteService failed, trying TomTom...');
-  }*/
+    console.log('OpenRouteService failed, trying TomTom...', err);
+  }
 
   // Fallback to TomTom if OpenRouteService fails
- /* if (!result) {
+  if (!result) {
     try {
-      // Try walking routes for each of the 3 nearest stations until we get a result
       for (const { station } of stationsWithDistance) {
         try {
           const response = await axios.get(
@@ -1184,42 +1270,49 @@ const findNearestStation = async (lat, lng) => {
               params: {
                 key: TOMTOM_API_KEY,
                 travelMode: 'pedestrian',
-                routeType: 'fastest'
+                routeType: 'fastest',
+                instructionsType: 'text'
               }
             }
           );
 
           if (response.data.routes && response.data.routes.length > 0) {
             const route = response.data.routes[0];
+            routePolyline = {
+              type: "LineString",
+              coordinates: route.legs[0].points.coordinates
+            };
+            
             result = {
               station,
-              distance: route.summary.lengthInMeters / 1000, // convert to km
+              distance: route.summary.lengthInMeters / 1000,
               duration: route.summary.travelTimeInSeconds,
-              service: 'TomTom'
+              service: 'TomTom',
+              routePolyline
             };
             serviceUsed = 'TomTom';
-            break; // Use the first successful response
+            break;
           }
         } catch (err) {
-          console.log(`TomTom failed for station ${station.name}, trying next...`);
+          console.log(`TomTom failed for station ${station.name}`);
         }
       }
     } catch (err) {
-      console.log('All TomTom attempts failed, falling back to straight-line distance...');
+      console.log('All TomTom attempts failed');
     }
-  }*/
+  }
 
-  // Final fallback - use the nearest by straight-line distance with estimated walking time
+  // Final fallback - straight-line distance without polyline
   if (!result) {
     const nearest = stationsWithDistance[0];
-    // Estimate walking time: 5 km/h walking speed (1.39 m/s)
-    const estimatedDuration = nearest.distance / 5 * 3600; // in seconds
+    const estimatedDuration = nearest.distance / 5 * 3600;
     
     result = {
       station: nearest.station,
       distance: nearest.distance,
       duration: estimatedDuration,
-      service: 'Straight-line distance (estimated)'
+      service: 'Straight-line distance (estimated)',
+      isEstimated: true
     };
     serviceUsed = 'Straight-line distance (estimated)';
   }
@@ -1235,8 +1328,9 @@ useEffect(() => {
    // Now find nearest station with walking details
    try {
    /* const userLat = 30.047130119453023;
-    const userLng = 31.383423483194452;*/
-    const nearestStationResult = await findNearestStation(geocodeCoordinates.latitude,geocodeCoordinates.longitude);
+    const userLng = 31.383423483194452;*/ 
+    //reaheb test 30.05312871805649, 31.50600299525917
+    const nearestStationResult = await findNearestStation(30.05312871805649, 31.50600299525917);
     setNearestStation(nearestStationResult);
     setCurrentNearestService(`${nearestStationResult.serviceUsed}`);
     
@@ -1270,6 +1364,33 @@ const getUserLocation = () => {
     }
   });
 };
+// In your component where you handle the map
+// 1. Create the ref at the component level
+const routeLayerRef = useRef(null);
+
+// 2. When drawing a new route
+useEffect(() => {
+  if (nearestStation?.routePolyline && mapRef.current) {
+    // Clear previous route if exists
+    if (routeLayerRef.current) {
+      mapRef.current.removeLayer(routeLayerRef.current);
+    }
+    
+    // Create new polyline layer and store reference
+    routeLayerRef.current = L.geoJSON(nearestStation.routePolyline, {
+      color: '#4285F4',
+      weight: 4,
+      opacity: 0.7
+    }).addTo(mapRef.current);
+  }
+
+  // 3. Cleanup on component unmount
+  return () => {
+    if (routeLayerRef.current && mapRef.current) {
+      mapRef.current.removeLayer(routeLayerRef.current);
+    }
+  };
+}, [nearestStation]);
   return (
     <>
       <AppContainer>
