@@ -300,10 +300,10 @@ const createCustomIcon = (color, letter, iconSize, iconAnchorSize, strokeWidth =
 };
 
 // Usage remains the same
-const routeStartIcon = createCustomIcon('#3388ff', 'S',17 , 12);
-const routeEndIcon = createCustomIcon('#3388ff', 'E', 17, 12);
-const tripStartIcon = createCustomIcon('green', 'S', 24, 12,3);
-const tripEndIcon = createCustomIcon('green', 'E', 22, 12,3);
+const routeStartIcon = createCustomIcon('#3388ff', 'S',21 , 11,0);
+const routeEndIcon = createCustomIcon('#3388ff', 'E', 21, 11,0);
+const tripStartIcon = createCustomIcon('green', 'S', 25, 12,3);
+const tripEndIcon = createCustomIcon('green', 'E', 25, 12,3);
 //
 const   busLiveIcon= createCustomIcon('green', 'B', 44, 24, 4);
 const  stationsIcon = createCustomIcon('black', 'S', 26, 12);
