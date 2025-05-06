@@ -179,10 +179,56 @@ const DriverTrip = () => {
       getRoutes()
       
   }, []);
+// External function to check GPS status
+const checkGPSStatus = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      return reject(new Error('Geolocation is not supported by your browser'));
+    }
+
+    // We'll use a timeout to handle cases where GPS might be enabled but not responding
+    const timeoutId = setTimeout(() => {
+      reject(new Error('GPS check timed out. Please ensure GPS is enabled.'));
+    }, 5000); // 5 seconds timeout
+
+    // Test geolocation with a simple getCurrentPosition call
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        clearTimeout(timeoutId);
+        resolve(true);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        let errorMessage;
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'GPS permission denied. Please enable GPS to start the trip.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'GPS signal is unavailable. Please check your GPS connection.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'GPS request timed out. Please ensure GPS is enabled and try again.';
+            break;
+          default:
+            errorMessage = 'Unknown GPS error occurred.';
+        }
+        reject(new Error(errorMessage));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 4000 // 4 seconds for the GPS check itself
+      }
+    );
+  });
+};
+
 
   const startTrip = async () => {
     if (!selectedRoute) return showAlert('warning', 'Please select a route before starting the trip.');
     try {
+      await checkGPSStatus();
       const res = await axios.post(`${backend_baseurl}/api/v1/trips/start`,{ busId, routeId: selectedRoute })
       console.log(res);
       
@@ -196,7 +242,7 @@ const DriverTrip = () => {
     } catch (error) {
       console.error("Failed to start trip:", error);
       //alert(" error while starting a Trip ",error);
-      showAlert('error' ,`error while starting a Trip : ${error}`)
+      showAlert('error' ,`Error While Starting A Trip : ${error}`)
     }
   };
 
@@ -236,108 +282,126 @@ setIsLoading(true)
     }
   };
 
-  useEffect(() => {
-    if (tripStarted && tripId) {
-      if ("geolocation" in navigator) {
-         // Connect socket
+// Kalman Filter Class Implementation
+class GPSKalmanFilter {
+  constructor() {
+    this.R = 0.01; // Noise of measurement
+    this.Q = 0.1; // Noise of process
+    this.A = 1; // State transition
+    this.B = 0; // Control input
+    this.C = 1; // Measurement
+    this.cov = NaN;
+    this.x = NaN; // Estimated signal
+  }
+
+  filter(measurement) {
+    if (isNaN(this.x)) {
+      this.x = measurement;
+      this.cov = this.Q;
+    } else {
+      // Prediction
+      const predX = this.A * this.x;
+      const predCov = this.A * this.cov * this.A + this.Q;
+
+      // Kalman gain
+      const K = predCov * this.C / (this.C * predCov * this.C + this.R);
+
+      // Correction
+      this.x = predX + K * (measurement - this.C * predX);
+      this.cov = predCov - K * this.C * predCov;
+    }
+    return this.x;
+  }
+}
+
+// Your tracking useEffect with all improvements
+useEffect(() => {
+  if (!tripStarted || !tripId) return;
+
+  // Initialize filters and tracking variables
+  const latFilter = new GPSKalmanFilter();
+  const lngFilter = new GPSKalmanFilter();
+  let lastGoodPosition = null;
+  let consecutiveBadAccuracyCount = 0;
+
+  if ("geolocation" in navigator) {
+    // Connect to socket
     socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => {
-            const { latitude, longitude } = pos.coords;
-            const timestamp = new Date().toISOString();
-            const point = { lat: latitude, lng: longitude, timestamp };
-console.log(point);
 
-            setCoordinates((prev) => {
-              // FIRST COORDINATE: Store but don't emit yet
-              if (prev.length === 0) {
-                return [point];
-              }
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        // Accuracy threshold check (15 meters or better)
+        if (pos.coords.accuracy > 15) {
+          consecutiveBadAccuracyCount++;
+          console.warn(`Ignoring position with accuracy ${pos.coords.accuracy}m`);
+          
+          // If we get too many bad readings in a row, warn the user
+          if (consecutiveBadAccuracyCount >= 5) {
+            showAlert('warning', 'Poor GPS accuracy detected. Please check your device location.');
+            consecutiveBadAccuracyCount = 0;
+          }
+          return;
+        }
+        consecutiveBadAccuracyCount = 0;
 
-              // SECOND COORDINATE: Validate against first
-              if (prev.length === 1) {
-                const distance = haversineDistance(
-                  prev[0].lat,
-                  prev[0].lng,
-                  point.lat,
-                  point.lng
-                );
+        // Apply Kalman filtering
+        const filteredLat = latFilter.filter(pos.coords.latitude);
+        const filteredLng = lngFilter.filter(pos.coords.longitude);
+        
+        const point = {
+          lat: filteredLat,
+          lng: filteredLng,
+          accuracy: pos.coords.accuracy,
+          timestamp: new Date().toISOString()
+        };
 
-                // Good start (<10m apart) - keep both
-                if (distance < 10) {
-                  const updated = [...prev, point];
-                  // Now emit both
-                  socketRef.current.emit("locationUpdate", {
-                    tripId,
-                    routeId: selectedRoute,
-                    busId,
-                    lat: prev[0].lat,
-                    lng: prev[0].lng,
-                  });
-                  socketRef.current.emit("locationUpdate", {
-                    tripId,
-                    routeId: selectedRoute,
-                    busId,
-                    lat: point.lat,
-                    lng: point.lng,
-                  });
-                  return updated;
-                }
-                // Bad start (≥10m apart) - discard first, use second
-                else {
-                  console.log("Discarded inaccurate first coordinate");
-                  // Only emit the second coordinate
-                  socketRef.current.emit("locationUpdate", {
-                    tripId,
-                    routeId: selectedRoute,
-                    busId,
-                    lat: point.lat,
-                    lng: point.lng,
-                  });
-                  return [point]; // Second coordinate becomes the first
-                }
-              }
+        // Speed validation if we have previous points
+        if (lastGoodPosition) {
+          const distance = haversineDistance(
+            lastGoodPosition.lat,
+            lastGoodPosition.lng,
+            point.lat,
+            point.lng
+          );
+          const timeDiff = (new Date(point.timestamp) - new Date(lastGoodPosition.timestamp)) / 1000;
+          const speed = timeDiff > 0 ? (distance / timeDiff) * 3.6 : 0; // km/h
+          
+          // Validate against reasonable bus speeds (0-120 km/h)
+          if (speed > 120) {
+            console.warn(`Implausible speed: ${speed.toFixed(1)} km/h - ignoring point`);
+            return;
+          }
+        }
 
-              // NORMAL OPERATION (after first two points)
-              const updated = [...prev];
-              const lastPoint = updated[updated.length - 1];
+        // Update last good position
+        lastGoodPosition = point;
 
-              // Redundancy check
-              if (lastPoint) {
-                const isSameLocation =
-                  lastPoint.lat.toFixed(5) === point.lat.toFixed(5) &&
-                  lastPoint.lng.toFixed(5) === point.lng.toFixed(5);
-                if (isSameLocation) {
-                  console.log("Ignored redundant location");
-                  return updated;
-                }
+        setCoordinates((prev) => {
+          // FIRST COORDINATE: Store but don't emit yet
+          if (prev.length === 0) {
+            return [point];
+          }
 
-                // Out of range check (>300m sudden jump)
-                const distance = haversineDistance(
-                  lastPoint.lat,
-                  lastPoint.lng,
-                  point.lat,
-                  point.lng
-                );
-                if (distance > 300) {
-                  console.warn("Ignored jumpy location, distance:", distance);
-                  return updated;
-                }
-              }
+          // SECOND COORDINATE: Validate against first
+          if (prev.length === 1) {
+            const distance = haversineDistance(
+              prev[0].lat,
+              prev[0].lng,
+              point.lat,
+              point.lng
+            );
 
-              updated.push(point);
-
-              // Save every 5 points
-              saveCounterRef.current += 1;
-              if (saveCounterRef.current >= 5) {
-                if (localStorageKey) {
-                  localStorage.setItem(localStorageKey, JSON.stringify(updated));
-                  console.log("Saved to localStorage", updated.length, "points");
-                }
-                saveCounterRef.current = 0;
-              }
-
-              // Emit new position
+            // Good start (<10m apart) - keep both
+            if (distance < 10) {
+              const updated = [...prev, point];
+              // Now emit both
+              socketRef.current.emit("locationUpdate", {
+                tripId,
+                routeId: selectedRoute,
+                busId,
+                lat: prev[0].lat,
+                lng: prev[0].lng,
+              });
               socketRef.current.emit("locationUpdate", {
                 tripId,
                 routeId: selectedRoute,
@@ -345,38 +409,107 @@ console.log(point);
                 lat: point.lat,
                 lng: point.lng,
               });
-
               return updated;
-            });
-          },
-          (error) => {
-            console.error("Location error:", error);
-            if(error.code === error.PERMISSION_DENIED) {
-              showAlert('warning', 'Trip Started But [Location Permission Denied] Please Enable GPS access To Get All System Features .');
-            } else if (error.code === error.POSITION_UNAVAILABLE) {
-              showAlert('warning', 'Location Position Unavailable. Please Check Your GPS Signal.');
-            } else {
-              showAlert('warning', 'Unable To Retrieve Location.');
             }
-          },
-          { enableHighAccuracy: true, maximumAge: 3000, timeout: 5000 }
-        );
-      } else {
-        //alert("Geolocation is not supported by your browser.");
-        showAlert('error' ,`Geolocation is not supported by your browser.`)
+            // Bad start (≥10m apart) - discard first, use second
+            else {
+              console.log("Discarded inaccurate first coordinate");
+              // Only emit the second coordinate
+              socketRef.current.emit("locationUpdate", {
+                tripId,
+                routeId: selectedRoute,
+                busId,
+                lat: point.lat,
+                lng: point.lng,
+              });
+              return [point]; // Second coordinate becomes the first
+            }
+          }
+
+          // NORMAL OPERATION (after first two points)
+          const updated = [...prev];
+          const lastPoint = updated[updated.length - 1];
+
+          // Redundancy check
+          if (lastPoint) {
+            const isSameLocation =
+              lastPoint.lat.toFixed(5) === point.lat.toFixed(5) &&
+              lastPoint.lng.toFixed(5) === point.lng.toFixed(5);
+            if (isSameLocation) {
+              console.log("Ignored redundant location");
+              return updated;
+            }
+
+            // Out of range check (>300m sudden jump)
+            const distance = haversineDistance(
+              lastPoint.lat,
+              lastPoint.lng,
+              point.lat,
+              point.lng
+            );
+            if (distance > 300) {
+              console.warn("Ignored jumpy location, distance:", distance);
+              return updated;
+            }
+          }
+
+          updated.push(point);
+
+          // Save every 5 points
+          saveCounterRef.current += 1;
+          if (saveCounterRef.current >= 5) {
+            if (localStorageKey) {
+              localStorage.setItem(localStorageKey, JSON.stringify(updated));
+              console.log("Saved to localStorage", updated.length, "points");
+            }
+            saveCounterRef.current = 0;
+          }
+
+          // Emit new position
+          socketRef.current.emit("locationUpdate", {
+            tripId,
+            routeId: selectedRoute,
+            busId,
+            lat: point.lat,
+            lng: point.lng,
+          });
+
+          return updated;
+        });
+      },
+      (error) => {
+        console.error("Location error:", error);
+        if (error.code === error.PERMISSION_DENIED) {
+          showAlert('warning', ' [Location Permission Denied] Please Enable GPS access To Get All System Features.');
+        } else if (error.code === error.POSITION_UNAVAILABLE) {
+          showAlert('warning', 'Location Position Unavailable. Please Check Your GPS Signal.');
+        } else if (error.code === error.TIMEOUT) {
+          showAlert('warning', 'GPS signal timed out. Please ensure good GPS reception.');
+        } else {
+          showAlert('warning', 'Unable To Retrieve Location.');
+        }
+      },
+      { 
+        enableHighAccuracy: true, 
+        maximumAge: 0, 
+        timeout: 10000 
       }
+    );
+  } else {
+    showAlert('error', 'Geolocation is not supported by your browser.');
+  }
+
+  // Cleanup function
+  return () => {
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
     }
-      return () => {
-        if (watchIdRef.current) {
-          navigator.geolocation.clearWatch(watchIdRef.current);
-        }
-        if (socketRef.current) {
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
-      };
-    
-  }, [tripStarted, tripId]);
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+  };
+}, [tripStarted, tripId]);
   //safty cleanup
   useEffect(() => {
     //in general

@@ -260,23 +260,54 @@ const SwalStyles = createGlobalStyle`
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
 // Custom icons
-const createCustomIcon = (color, letter,iconSize, iconAnchorSize ,strokeWidth=2) => new L.DivIcon({
-  html: `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="12" cy="12" r="10" fill="${color}" stroke="${'white'}" stroke-width="${strokeWidth}"/>
-      <text x="12" y="16" font-size="12" text-anchor="middle" fill="white" font-weight="bold">${letter}</text>
-    </svg>
-  `,
-  className: "",
-  iconSize: [iconSize, iconSize],
-  iconAnchor: [iconAnchorSize, iconAnchorSize]
-});
+const createCustomIcon = (color, letter, iconSize, iconAnchorSize, strokeWidth = 2) => {
+  // Special case for bus live icon
+  if (letter === 'B' && color === 'green') {
+    return new L.DivIcon({
+      html: `
+        <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+          <!-- Glow effect (outer circle with opacity) -->
+          <circle cx="16" cy="16" r="11" fill="rgba(76, 175, 80, 0.3)" stroke="rgba(76, 175, 80, 0.5)" stroke-width="10"/>
+          
+          <!-- Main green circle -->
+          <circle cx="16" cy="16" r="10" fill="#4CAF50" stroke="white" stroke-width="${strokeWidth}"/>
+          
+          <!-- Bus icon -->
+          <g transform="translate(10,10) scale(0.5)">
+            <path d="M4 16c0 .88.39 1.67 1 2.22V20c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h8v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1.78c.61-.55 1-1.34 1-2.22V6c0-3.5-3.58-4-8-4s-8 .5-8 4v10zm3.5 1c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm9 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm1.5-5H6V6h12v6z" 
+                  fill="white"/>
+          </g>
+        </svg>
+      `,
+      className: "bus-live-icon",
+      iconSize: [iconSize, iconSize],
+      iconAnchor: [iconAnchorSize, iconAnchorSize]
+    });
+  }
 
-const startIcon = createCustomIcon('#00B0F0', 'S',25,12);
-const endIcon = createCustomIcon('#00B0F0', 'E',25,12);
-const  busLiveIcon= createCustomIcon('green', 'B',40,23,4);
-const stationsIcon = createCustomIcon('black', 'S',26,12);
-const busOfflineIcon = createCustomIcon('#95a5a6', 'N',24,12);
+  // Default case for other icons
+  return new L.DivIcon({
+    html: `
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" fill="${color}" stroke="white" stroke-width="${strokeWidth}"/>
+        <text x="11.5" y="16.5" font-size="12" text-anchor="middle" fill="white" font-weight="bold">${letter}</text>
+      </svg>
+    `,
+    className: "",
+    iconSize: [iconSize, iconSize],
+    iconAnchor: [iconAnchorSize, iconAnchorSize]
+  });
+};
+
+// Usage remains the same
+const routeStartIcon = createCustomIcon('#3388ff', 'S',17 , 12);
+const routeEndIcon = createCustomIcon('#3388ff', 'E', 17, 12);
+const tripStartIcon = createCustomIcon('green', 'S', 24, 12,3);
+const tripEndIcon = createCustomIcon('green', 'E', 22, 12,3);
+//
+const   busLiveIcon= createCustomIcon('green', 'B', 44, 24, 4);
+const  stationsIcon = createCustomIcon('black', 'S', 26, 12);
+const busOfflineIcon = createCustomIcon('#95a5a6', 'N', 24, 12);
 const RouteMap = () => {
   const socketRef = useRef(null);
   const currentTripRef = useRef({ routeId: null, tripId: null });
@@ -301,7 +332,7 @@ const RouteMap = () => {
   const colors = {
     plannedRoute: '#3388ff',
     //activeTrip: '#555',
-    completedTrip: '#ff7800',
+    completedTrip: 'green',
     liveBus: '#e53e3e',
     offlineBus: '#718096',
     station: '#38a169'
@@ -741,9 +772,10 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
         // simplifyPath(path, 0.0005);
         // smoothPath(path, 2);
 
-       /* setTripPath(simplifyPath(path, 0.000008));
-        console.log("path after : " , simplifyPath(path, 0.000008));*/
+        /*setTripPath(simplifyPath(path, 0.00001));
+        console.log("path after : " , simplifyPath(path, 0.00001));*/
       
+        //setTripPath(simplifyPath(path, 0.0005));
         setTripPath(path);
         const timestamp = data.coordinates.map((t) => [t.timestamp]);
         setTripCoordinatesTimestamp(timestamp);
@@ -1616,47 +1648,78 @@ border:"1px solid lightgray",
 
             {/* Trip Path */}
             {tripPath.length > 1 && (
-              <Polyline
-                positions={tripPath}
-                color={colors.completedTrip}
-                weight={5}
-                opacity={0.8}
-                dashArray={selectedTripId ? undefined : "5, 5"} // Dashed for completed trips
-              />
+            <>
+            {/* Stroke/Outline (wider line underneath) */}
+            <Polyline
+              positions={tripPath}
+              color="white" // Stroke color
+              weight={8}    // Slightly wider than main line
+              opacity={0.8}
+              dashArray={selectedTripId ? undefined : "5, 5"}
+              lineCap="round"
+              lineJoin="round"
+            />
+            
+            {/* Main colored line */}
+            <Polyline
+              positions={tripPath}
+              color={colors.completedTrip}
+              weight={5}    // Slightly narrower than stroke
+              opacity={0.8}
+              dashArray={selectedTripId ? undefined : "5, 5"}
+              lineCap="round"
+              lineJoin="round"
+            />
+          </>
             )}
 
             {/* Trip Start/End Markers */}
             {tripPath.length > 0 && (
               <>
-                <Marker position={tripPath[0]} icon={startIcon}>
+                <Marker position={tripPath[0]} icon={tripStartIcon}>
                   <Popup>Trip Start Point</Popup>
                 </Marker>
-                <Marker position={tripPath[tripPath.length - 1]} icon={endIcon}>
+                <Marker position={tripPath[tripPath.length - 1]} icon={tripEndIcon}>
                   <Popup>Trip End Point</Popup>
                 </Marker>
               </>
             )}
 
             {/* Planned Route */}
-            {route.length > 1 && (
+            {route.length > 1 &&  ( <>
+               {/* Stroke/Outline (wider line underneath) */}
+               <Polyline
+              positions={route}
+              color="white" // Stroke color
+              weight={8}    // Slightly wider than main line
+              opacity={0.8}
+           
+              lineCap="round"
+              lineJoin="round"
+            />
+             {/* Main colored line */}
               <Polyline
                 positions={route}
                 color={trafficInfo ?
                   (trafficInfo.congestion < 30 ? '#4CAF50' :
                     trafficInfo.congestion < 70 ? '#FFC107' : '#F44336') :
                   colors.plannedRoute}
-                weight={6}
+                weight={5}
                 opacity={0.8}
+                   lineCap="round"
+              lineJoin="round"
               />
+            
+            </>
             )}
 
             {/* Route Start/End Markers */}
             {route.length > 0 && (
               <>
-                <Marker position={route[0]} icon={startIcon}>
+                <Marker position={route[0]} icon={routeStartIcon}>
                   <Popup>Route Start Point</Popup>
                 </Marker>
-                <Marker position={route[route.length - 1]} icon={endIcon}>
+                <Marker position={route[route.length - 1]} icon={routeEndIcon}>
                   <Popup>Route End Point</Popup>
                 </Marker>
               </>
