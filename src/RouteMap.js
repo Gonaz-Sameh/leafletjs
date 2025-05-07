@@ -18,6 +18,7 @@ import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
 import { FaLayerGroup, FaTrashAlt, FaCheck, FaBus, FaExpand, FaChevronLeft, FaChevronRight, FaMapMarkerAlt, FaRoute, FaTrash, FaSave, FaPlus, FaClock, FaTrafficLight } from 'react-icons/fa';
 import simplify from 'simplify-js';
+import * as turf from "@turf/turf";
 // Animations
 const fadeIn = keyframes`
   from { opacity: 0; transform: translateY(-20px); }
@@ -310,7 +311,13 @@ const  stationsIcon = createCustomIcon('black', 'S', 26, 12);
 const busOfflineIcon = createCustomIcon('#95a5a6', 'N', 24, 12);
 const RouteMap = () => {
   const socketRef = useRef(null);
-  const currentTripRef = useRef({ routeId: null, tripId: null });
+  const currentTripRef = useRef({ routeId: null, tripId: null , selectedRouteDetails:null ,selectedRouteStations:null });
+  const [onRouteStatus, setOnRouteStatus] = useState('');
+  const [stationInfo, setStationInfo] = useState({
+    prev: "",
+    current: "",
+    next: ""
+  });
   const backend_baseurl = process.env.REACT_APP_BACKEND_BASEURL;
   const TOMTOM_API_KEY = 'H1acEMeFQr8cJsAOgL0nT1drv7lyA2Fe'; //mosco
   const LOCATIONIQ_API_KEY='pk.430e64a0289ab733e075ea2f460c45f8';//mosco
@@ -533,17 +540,21 @@ const RouteMap = () => {
 
 useEffect(() => {
   currentTripRef.current = { 
-    routeId: selectedRouteId, 
-    tripId: selectedTripId 
+    routeId: selectedRouteId, //selected route id
+    tripId: selectedTripId , // trip id that happend on selected route
+    selectedRouteDetails:route, //selected route coordinates
+    selectedRouteStations:stations //selected route stations coordinates
   };
+//console.log("sssssss :",currentTripRef.current.selectedRouteStations);
 
-}, [selectedRouteId, selectedTripId]);
+}, [selectedRouteId, selectedTripId ,route,stations]);
   useEffect(() => {
 
     // Connect socket on component mount
     socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
 
-    console.log(socketRef.current);
+    const TOLERANCE_METERS = 30; // Adjust based on testing
+    const STATION_TOLERANCE_METERS = 50;
     // Listen to live bus updates
     const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
       console.log({ tripId, routeId, busId, lat, lng });
@@ -552,7 +563,88 @@ useEffect(() => {
         const current = currentTripRef.current;
         if (routeId === current.routeId && tripId === current.tripId) {
         setBusPath([[lat, lng]]);
+
+        try{
+     //start status bus on route    
+          // Check if bus is near the route polyline
+    const busPoint = turf.point([lng, lat]); // GeoJSON uses [lng, lat]
+    const routeLine = turf.lineString(
+      current.selectedRouteDetails.map(coord => [coord[1], coord[0]]) // Ensure same format
+    );
+console.log("sssss : ",routeLine);
+
+    const distance = turf.pointToLineDistance(busPoint, routeLine, {
+      units: "meters"
+    });
+
+    if (distance <= TOLERANCE_METERS) {
+      setOnRouteStatus("On Route ✅");
+    } else {
+      setOnRouteStatus("Off Route ❌");
+    }}catch(e){
+      setOnRouteStatus(`error : ${e}`);
+    }
+//end status bus on route 
+//start station status 
+try{
+// ---------- STATION STATUS ----------
+const stations = current.selectedRouteStations || [];
+let currentIndex = -1;
+
+// Check if bus is exactly at a station
+for (let i = 0; i < stations.length; i++) {
+  const station = stations[i];
+  const dist = haversineDistance(lat, lng, station.lat, station.lng);
+  if (dist <= STATION_TOLERANCE_METERS) {
+    currentIndex = i;
+    break;
+  }
+}
+
+if (currentIndex !== -1) {
+  setStationInfo({
+    prev: stations[currentIndex - 1]?.name || "Not found",
+    current: stations[currentIndex].name,
+    next: stations[currentIndex + 1]?.name || "Not found"
+  });
+} else {
+  // Check if between any two stations
+  let foundBetween = false;
+  for (let i = 0; i < stations.length - 1; i++) {
+    const s1 = stations[i];
+    const s2 = stations[i + 1];
+    const d1 = haversineDistance(lat, lng, s1.lat, s1.lng);
+    const d2 = haversineDistance(lat, lng, s2.lat, s2.lng);
+    const total = haversineDistance(s1.lat, s1.lng, s2.lat, s2.lng);
+
+    if (d1 + d2 - total < STATION_TOLERANCE_METERS) {
+      setStationInfo({
+        prev: s1.name,
+        current: "Between stations",
+        next: s2.name
+      });
+      foundBetween = true;
+      break;
+    }
+  }
+
+  if (!foundBetween) {
+    setStationInfo({
+      prev: "Not found",
+      current: "Not found",
+      next: "Not found"
+    });
+  }}
+}catch(e){
+  setStationInfo({
+    prev: "",
+    current: "",
+    next: ""
+  });
+}
+//end stations status
       }
+
     };
 
     socketRef.current.on("busLocationUpdate", handleBusUpdate);
@@ -565,7 +657,7 @@ useEffect(() => {
         socketRef.current = null;
       }
       if(currentTripRef.current){
-        currentTripRef.current ={ routeId: null, tripId: null }
+        currentTripRef.current ={ routeId: null, tripId: null , selectedRouteDetails:null ,selectedRouteStations:null }
       }
     };
   }, []);
@@ -772,8 +864,8 @@ getRouteDistance(data.coordinates.map(({ lat, lng }) => [lng, lat])).then((resul
         // simplifyPath(path, 0.0005);
         // smoothPath(path, 2);
 
-        /*setTripPath(simplifyPath(path, 0.00001));
-        console.log("path after : " , simplifyPath(path, 0.00001));*/
+        /*setTripPath(simplifyPath(path, 0.0005));
+        console.log("path after : " , simplifyPath(path, 0.0005));*/
       
         //setTripPath(simplifyPath(path, 0.0005));
         setTripPath(path);
@@ -1460,7 +1552,7 @@ useEffect(() => {
     </div>
   </div>
 )}
-   <button 
+   {/*<button 
   onClick={async () => {
     try {
       const location = await getUserLocation();
@@ -1490,7 +1582,7 @@ useEffect(() => {
 >
   <span>📍</span>
   Get My Location
-</button>
+</button>*/}
   {/* Service indicator */}
   <div style={{ 
     textAlign: 'center',
@@ -1604,6 +1696,16 @@ border:"1px solid lightgray",
       {errorGeocode}
     </div>
   )}
+
+<div>
+  Bus Status: <strong>{onRouteStatus}</strong>
+</div>
+<div>
+  <p><strong>Previous Station:</strong> {stationInfo.prev}</p>
+  <p><strong>Current Station:</strong> {stationInfo.current}</p>
+  <p><strong>Next Station:</strong> {stationInfo.next}</p>
+</div>
+
 </div>
         <MapStyledContainer>
       

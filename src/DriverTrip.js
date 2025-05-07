@@ -321,7 +321,7 @@ useEffect(() => {
   // Initialize filters and tracking variables
   const latFilter = new GPSKalmanFilter();
   const lngFilter = new GPSKalmanFilter();
-  let lastGoodPosition = null;
+  //let lastGoodPosition = null;
   let consecutiveBadAccuracyCount = 0;
 
   if ("geolocation" in navigator) {
@@ -356,7 +356,7 @@ useEffect(() => {
         };
 
         // Speed validation if we have previous points
-        if (lastGoodPosition) {
+       /* if (lastGoodPosition) {
           const distance = haversineDistance(
             lastGoodPosition.lat,
             lastGoodPosition.lng,
@@ -374,7 +374,7 @@ useEffect(() => {
         }
 
         // Update last good position
-        lastGoodPosition = point;
+        lastGoodPosition = point;*/
 
         setCoordinates((prev) => {
           // FIRST COORDINATE: Store but don't emit yet
