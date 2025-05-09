@@ -16,7 +16,7 @@ import Swal from 'sweetalert2'
 import axios from "axios";
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
-import { FaLayerGroup, FaTrashAlt, FaCheck, FaBus, FaExpand, FaChevronLeft, FaChevronRight, FaMapMarkerAlt, FaRoute, FaTrash, FaSave, FaPlus, FaClock, FaTrafficLight } from 'react-icons/fa';
+import { FaLayerGroup, FaTrashAlt,FaArrowRight, FaCheck, FaBus, FaExpand, FaChevronLeft, FaChevronRight, FaMapMarkerAlt, FaRoute, FaTrash, FaSave, FaPlus, FaClock, FaTrafficLight } from 'react-icons/fa';
 import simplify from 'simplify-js';
 import * as turf from "@turf/turf";
 // Animations
@@ -256,6 +256,66 @@ const SwalStyles = createGlobalStyle`
       background-color: #c0392b !important;
     }
   }
+`;
+
+
+const BusStatusCard = styled.div`
+  background: linear-gradient(135deg, #6e8efb, #a777e3);
+  border-radius: 16px;
+  padding: 24px;
+  color: white;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  font-family: 'Segoe UI', sans-serif;
+  max-width: 400px;
+  margin: 20px auto;
+`;
+
+const StatusIndicator = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+`;
+
+const StatusText = styled.strong`
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: ${props => props.$onRoute ? "#4cff8f" : "#ff6b6b"};
+`;
+
+const StationInfoGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 15px;
+  align-items: center;
+`;
+
+const StationCard = styled.div`
+  background: rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+`;
+
+const StationLabel = styled.p`
+  margin: 0 0 5px 0;
+  font-size: 0.9rem;
+  opacity: 0.8;
+`;
+
+const StationName = styled.p`
+  margin: 0;
+  font-weight: bold;
+  font-size: 1.1rem;
+`;
+
+const RouteArrow = styled.div`
+  color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  justify-content: center;
 `;
 // Socket connection here wrong becuse its effect by other components 
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
@@ -538,153 +598,160 @@ const RouteMap = () => {
     fetchNearestStations();
   }, []);*/
 
-  useEffect(() => {
-    const prepareSortedStations = (route,stations) => {
-      const routeCoords = route;
-      const stationsCoords = stations || [];
-  
-      if (!routeCoords || stationsCoords.length === 0) return [];
-  
-      const routeLine = turf.lineString(
-        routeCoords.map(coord => [coord[1], coord[0]]) // [lng, lat]
-      );
-  
-      return stationsCoords
-        .map(station => {
-          const pt = turf.point([station.lng, station.lat]);
-          const snapped = turf.nearestPointOnLine(routeLine, pt, { units: "meters" });
-          return {
-            ...station,
-            distAlongRoute: snapped.properties.location,
-          };
-        })
-        .sort((a, b) => a.distAlongRoute - b.distAlongRoute);
-    };
-    currentTripRef.current = { 
-      routeId: selectedRouteId, //selected route id
-      tripId: selectedTripId , // trip id that happend on selected route
-      selectedRouteDetails:route, //selected route coordinates , [The first element in selectedRouteDetails is treated as the start of the route,and end elemnt is last ]
-      selectedRouteStations:stations, //selected route stations coordinates [ the order determines "start → end"]
-      routeStationsSortedByItsLocation:prepareSortedStations(route,stations) // sorted by its added location on map, becuse when i'm get it its be sorted by its id or time and its not logic
-    };   
-  console.log("sssssss :",currentTripRef.current.routeStationsSortedByItsLocation); 
-  }, [selectedRouteId, selectedTripId ,route,stations]);
-  
-    useEffect(() => {
-  
-      // Connect socket on component mount
-      socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
-  
-      const TOLERANCE_METERS = 30; // Adjust based on testing
-      const STATION_TOLERANCE_METERS = 50;
-      // Listen to live bus updates
-      const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
-        console.log({ tripId, routeId, busId, lat, lng });
-        //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
+
+useEffect(() => {
+  const prepareSortedStations = (route, stations) => {
+    const routeCoords = route;
+    const stationsCoords = stations || [];
+
+    if (!routeCoords || stationsCoords.length === 0) return [];
+
+    const routeLine = turf.lineString(
+      routeCoords.map(coord => [coord[1], coord[0]]) // [lng, lat]
+    );
+
+    return stationsCoords
+      .map(station => {
+        const pt = turf.point([station.lng, station.lat]);
+        const snapped = turf.nearestPointOnLine(routeLine, pt, { units: "meters" });
+        return {
+          ...station,
+          distAlongRoute: snapped.properties.location,
+        };
+      })
+      .sort((a, b) => a.distAlongRoute - b.distAlongRoute);
+  };
+
+  currentTripRef.current = {
+    routeId: selectedRouteId, //selected route id
+    tripId: selectedTripId , // trip id that happend on selected route
+    selectedRouteDetails:route, //selected route coordinates , [The first element in selectedRouteDetails is treated as the start of the route,and end elemnt is last ]
+    selectedRouteStations:stations, //selected route stations coordinates [ the order determines "start → end"]
+    routeStationsSortedByItsLocation:prepareSortedStations(route,stations) // sorted by its added location on map, becuse when i'm get it its be sorted by its id or time and its not logic
+ 
+  };
+  console.log("Sorted Stations:", currentTripRef.current.routeStationsSortedByItsLocation);
+}, [selectedRouteId, selectedTripId, route, stations]);
+
+useEffect(() => {
+  socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
+
+  const TOLERANCE_METERS = 30;
+  const STATION_TOLERANCE_METERS = 50;
+
+  const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
+    const current = currentTripRef.current;
+       //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
        // if (routeId === selectedRouteId && tripId == selectedTripId) {
-          const current = currentTripRef.current;
-          if (routeId === current.routeId && tripId === current.tripId) {
-          setBusPath([[lat, lng]]);
-  
-          try{
-       //start status bus on route    
-            // Check if bus is near the route polyline
-      const busPoint = turf.point([lng, lat]); // GeoJSON uses [lng, lat]
-      const routeLine = turf.lineString(
-        current.selectedRouteDetails.map(coord => [coord[1], coord[0]]) // Ensure same format
-      );
-  console.log("sssss : ",routeLine);
-  
-      const distance = turf.pointToLineDistance(busPoint, routeLine, {
-        units: "meters"
-      });
-  
-      if (distance <= TOLERANCE_METERS) {
-        setOnRouteStatus("On Route ✅");
-      } else {
-        setOnRouteStatus("Off Route ❌");
-      }}catch(e){
+    if (routeId === current.routeId && tripId === current.tripId) {
+      setBusPath([[lat, lng]]);
+
+      try {
+        const busPoint = turf.point([lng, lat]);
+        const routeLine = turf.lineString(
+          current.selectedRouteDetails.map(coord => [coord[1], coord[0]])
+        );
+
+        const distance = turf.pointToLineDistance(busPoint, routeLine, {
+          units: "meters"
+        });
+
+        setOnRouteStatus(distance <= TOLERANCE_METERS ? "On Route ✅" : "Off Route ❌");
+      } catch (e) {
         setOnRouteStatus(`error : ${e}`);
       }
-  //end status bus on route 
-  //start station status 
-  try{
-  // ---------- STATION STATUS ----------
-  const stations = current.routeStationsSortedByItsLocation || [];
-  let currentIndex = -1;
-  
-  // Check if bus is exactly at a station
-  for (let i = 0; i < stations.length; i++) {
-    const station = stations[i];
-    const dist = haversineDistance(lat, lng, station.lat, station.lng);
-    if (dist <= STATION_TOLERANCE_METERS) {
-      currentIndex = i;
-      break;
-    }
-  }
-  
-  if (currentIndex !== -1){
-    setStationInfo({
-      prev: stations[currentIndex - 1]?.name || "Not found",
-      current: stations[currentIndex].name,
-      next: stations[currentIndex + 1]?.name || "Not found"
-    });
-  }else{
-    // Check if between any two stations
-    let foundBetween = false;
-    for (let i = 0; i < stations.length - 1; i++) {
-      const s1 = stations[i];
-      const s2 = stations[i + 1];
-      const d1 = haversineDistance(lat, lng, s1.lat, s1.lng);
-      const d2 = haversineDistance(lat, lng, s2.lat, s2.lng);
-      const total = haversineDistance(s1.lat, s1.lng, s2.lat, s2.lng);
-  
-      if (d1 + d2 - total < STATION_TOLERANCE_METERS) {
-        setStationInfo({
-          prev: s1.name,
-          current: "Between stations",
-          next: s2.name
+
+      try {
+        const stations = current.routeStationsSortedByItsLocation || [];
+        const busPt = turf.point([lng, lat]);
+        const routeLine = turf.lineString(
+          current.selectedRouteDetails.map(coord => [coord[1], coord[0]])
+        );
+
+        // Project bus onto route to get its position along the route
+        const snappedBus = turf.nearestPointOnLine(routeLine, busPt, { units: "meters" });
+        const busPosition = snappedBus.properties.location;
+
+        // Only consider stations ahead of the bus or very close behind
+        const visibleStations = stations.filter(station => {
+          return station.distAlongRoute >= busPosition ||
+            Math.abs(station.distAlongRoute - busPosition) <= 0.001; // small tolerance
         });
-        foundBetween = true;
-        break;
+
+        let currentIndex = -1;
+        for (let i = 0; i < visibleStations.length; i++) {
+          const station = visibleStations[i];
+          const dist = haversineDistance(lat, lng, station.lat, station.lng);
+          if (dist <= STATION_TOLERANCE_METERS) {
+            currentIndex = i;
+            break;
+          }
+        }
+
+        if (currentIndex !== -1) {
+          setStationInfo({
+            prev: visibleStations[currentIndex - 1]?.name || "Not found",
+            current: visibleStations[currentIndex].name,
+            next: visibleStations[currentIndex + 1]?.name || "Not found"
+          });
+        } else {
+          let foundBetween = false;
+          for (let i = 0; i < visibleStations.length - 1; i++) {
+            const s1 = visibleStations[i];
+            const s2 = visibleStations[i + 1];
+            const d1 = haversineDistance(lat, lng, s1.lat, s1.lng);
+            const d2 = haversineDistance(lat, lng, s2.lat, s2.lng);
+            const total = haversineDistance(s1.lat, s1.lng, s2.lat, s2.lng);
+
+            if (d1 + d2 - total < STATION_TOLERANCE_METERS) {
+              setStationInfo({
+                prev: s1.name,
+                current: "Between stations",
+                next: s2.name
+              });
+              foundBetween = true;
+              break;
+            }
+          }
+
+          if (!foundBetween) {
+            setStationInfo({
+              prev: "Not found",
+              current: "Not found",
+              next: "Not found"
+            });
+          }
+        }
+      } catch (e) {
+        setStationInfo({
+          prev: "",
+          current: "",
+          next: ""
+        });
       }
     }
-  
-    if (!foundBetween) {
-      setStationInfo({
-        prev: "Not found",
-        current: "Not found",
-        next: "Not found"
-      });
-    }}
-  }catch(e){
-    setStationInfo({
-      prev: "",
-      current: "",
-      next: ""
-    });
-  }
-  //end stations status
-        }
-  
+  };
+
+  socketRef.current.on("busLocationUpdate", handleBusUpdate);
+
+  return () => {
+    if (socketRef.current) {
+      socketRef.current.off("busLocationUpdate", handleBusUpdate);
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    if (currentTripRef.current) {
+      currentTripRef.current = {
+        routeId: null,
+        tripId: null,
+        selectedRouteDetails: null,
+        selectedRouteStations: null,
+        routeStationsSortedByItsLocation: null
       };
-  
-      socketRef.current.on("busLocationUpdate", handleBusUpdate);
-  
-      return () => {
-        // Clean up listeners and connection on unmount
-        if (socketRef.current) {
-          socketRef.current.off("busLocationUpdate", handleBusUpdate);
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
-        if(currentTripRef.current){
-          currentTripRef.current ={ 
-            routeId: null, tripId: null , selectedRouteDetails:null ,
-            selectedRouteStations:null,routeStationsSortedByItsLocation:null }
-        }
-      };
-    }, []);
+    }
+  };
+}, []);
+
   
 
   //get routes [main keys] to select route from dropdown ,
@@ -1722,14 +1789,39 @@ border:"1px solid lightgray",
     </div>
   )}
 
-<div>
-  Bus Status: <strong>{onRouteStatus}</strong>
-</div>
-<div>
-  <p><strong>Previous Station:</strong> {stationInfo.prev}</p>
-  <p><strong>Current Station:</strong> {stationInfo.current}</p>
-  <p><strong>Next Station:</strong> {stationInfo.next}</p>
-</div>
+<BusStatusCard>
+      <StatusIndicator>
+        <FaBus size={24} />
+        <StatusText $onRoute={onRouteStatus === "On Route"}>
+          {onRouteStatus}
+        </StatusText>
+      </StatusIndicator>
+
+      <StationInfoGrid>
+        <StationCard>
+          <StationLabel><FaMapMarkerAlt /> Previous</StationLabel>
+          <StationName>{stationInfo.prev}</StationName>
+        </StationCard>
+
+        <RouteArrow>
+          <FaArrowRight size={20} />
+        </RouteArrow>
+
+        <StationCard>
+          <StationLabel><FaMapMarkerAlt /> Current</StationLabel>
+          <StationName>{stationInfo.current}</StationName>
+        </StationCard>
+
+        <RouteArrow>
+          <FaArrowRight size={20} />
+        </RouteArrow>
+
+        <StationCard>
+          <StationLabel><FaMapMarkerAlt /> Next</StationLabel>
+          <StationName>{stationInfo.next}</StationName>
+        </StationCard>
+      </StationInfoGrid>
+    </BusStatusCard>
 
 </div>
         <MapStyledContainer>
