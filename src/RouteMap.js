@@ -623,13 +623,13 @@ const RouteMap = () => {
     }
   }
   
-  if (currentIndex !== -1) {
+  if (currentIndex !== -1){
     setStationInfo({
       prev: stations[currentIndex - 1]?.name || "Not found",
       current: stations[currentIndex].name,
       next: stations[currentIndex + 1]?.name || "Not found"
     });
-  } else {
+  }else{
     // Check if between any two stations
     let foundBetween = false;
     for (let i = 0; i < stations.length - 1; i++) {
