@@ -311,7 +311,7 @@ const  stationsIcon = createCustomIcon('black', 'S', 26, 12);
 const busOfflineIcon = createCustomIcon('#95a5a6', 'N', 24, 12);
 const RouteMap = () => {
   const socketRef = useRef(null);
-  const currentTripRef = useRef({ routeId: null, tripId: null , selectedRouteDetails:null ,selectedRouteStations:null });
+  const currentTripRef = useRef({ routeId: null, tripId: null , selectedRouteDetails:null ,selectedRouteStations:null ,routeStationsSortedByItsLocation:null });
   const [onRouteStatus, setOnRouteStatus] = useState('');
   const [stationInfo, setStationInfo] = useState({
     prev: "",
@@ -538,129 +538,154 @@ const RouteMap = () => {
     fetchNearestStations();
   }, []);*/
 
-useEffect(() => {
-  currentTripRef.current = { 
-    routeId: selectedRouteId, //selected route id
-    tripId: selectedTripId , // trip id that happend on selected route
-    selectedRouteDetails:route, //selected route coordinates
-    selectedRouteStations:stations //selected route stations coordinates
-  };
-//console.log("sssssss :",currentTripRef.current.selectedRouteStations);
-
-}, [selectedRouteId, selectedTripId ,route,stations]);
   useEffect(() => {
-
-    // Connect socket on component mount
-    socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
-
-    const TOLERANCE_METERS = 30; // Adjust based on testing
-    const STATION_TOLERANCE_METERS = 50;
-    // Listen to live bus updates
-    const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
-      console.log({ tripId, routeId, busId, lat, lng });
-      //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
-     // if (routeId === selectedRouteId && tripId == selectedTripId) {
-        const current = currentTripRef.current;
-        if (routeId === current.routeId && tripId === current.tripId) {
-        setBusPath([[lat, lng]]);
-
-        try{
-     //start status bus on route    
-          // Check if bus is near the route polyline
-    const busPoint = turf.point([lng, lat]); // GeoJSON uses [lng, lat]
-    const routeLine = turf.lineString(
-      current.selectedRouteDetails.map(coord => [coord[1], coord[0]]) // Ensure same format
-    );
-console.log("sssss : ",routeLine);
-
-    const distance = turf.pointToLineDistance(busPoint, routeLine, {
-      units: "meters"
-    });
-
-    if (distance <= TOLERANCE_METERS) {
-      setOnRouteStatus("On Route ✅");
-    } else {
-      setOnRouteStatus("Off Route ❌");
-    }}catch(e){
-      setOnRouteStatus(`error : ${e}`);
-    }
-//end status bus on route 
-//start station status 
-try{
-// ---------- STATION STATUS ----------
-const stations = current.selectedRouteStations || [];
-let currentIndex = -1;
-
-// Check if bus is exactly at a station
-for (let i = 0; i < stations.length; i++) {
-  const station = stations[i];
-  const dist = haversineDistance(lat, lng, station.lat, station.lng);
-  if (dist <= STATION_TOLERANCE_METERS) {
-    currentIndex = i;
-    break;
-  }
-}
-
-if (currentIndex !== -1) {
-  setStationInfo({
-    prev: stations[currentIndex - 1]?.name || "Not found",
-    current: stations[currentIndex].name,
-    next: stations[currentIndex + 1]?.name || "Not found"
-  });
-} else {
-  // Check if between any two stations
-  let foundBetween = false;
-  for (let i = 0; i < stations.length - 1; i++) {
-    const s1 = stations[i];
-    const s2 = stations[i + 1];
-    const d1 = haversineDistance(lat, lng, s1.lat, s1.lng);
-    const d2 = haversineDistance(lat, lng, s2.lat, s2.lng);
-    const total = haversineDistance(s1.lat, s1.lng, s2.lat, s2.lng);
-
-    if (d1 + d2 - total < STATION_TOLERANCE_METERS) {
-      setStationInfo({
-        prev: s1.name,
-        current: "Between stations",
-        next: s2.name
+    const prepareSortedStations = (route,stations) => {
+      const routeCoords = route;
+      const stationsCoords = stations || [];
+  
+      if (!routeCoords || stationsCoords.length === 0) return [];
+  
+      const routeLine = turf.lineString(
+        routeCoords.map(coord => [coord[1], coord[0]]) // [lng, lat]
+      );
+  
+      return stationsCoords
+        .map(station => {
+          const pt = turf.point([station.lng, station.lat]);
+          const snapped = turf.nearestPointOnLine(routeLine, pt, { units: "meters" });
+          return {
+            ...station,
+            distAlongRoute: snapped.properties.location,
+          };
+        })
+        .sort((a, b) => a.distAlongRoute - b.distAlongRoute);
+    };
+    currentTripRef.current = { 
+      routeId: selectedRouteId, //selected route id
+      tripId: selectedTripId , // trip id that happend on selected route
+      selectedRouteDetails:route, //selected route coordinates , [The first element in selectedRouteDetails is treated as the start of the route,and end elemnt is last ]
+      selectedRouteStations:stations, //selected route stations coordinates [ the order determines "start → end"]
+      routeStationsSortedByItsLocation:prepareSortedStations(route,stations) // sorted by its added location on map, becuse when i'm get it its be sorted by its id or time and its not logic
+    };   
+  console.log("sssssss :",currentTripRef.current.routeStationsSortedByItsLocation); 
+  }, [selectedRouteId, selectedTripId ,route,stations]);
+  
+    useEffect(() => {
+  
+      // Connect socket on component mount
+      socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
+  
+      const TOLERANCE_METERS = 30; // Adjust based on testing
+      const STATION_TOLERANCE_METERS = 50;
+      // Listen to live bus updates
+      const handleBusUpdate = ({ tripId, routeId, busId, lat, lng }) => {
+        console.log({ tripId, routeId, busId, lat, lng });
+        //this not allowed becuse  selectedRouteId and  selectedTripId is still with deff values
+       // if (routeId === selectedRouteId && tripId == selectedTripId) {
+          const current = currentTripRef.current;
+          if (routeId === current.routeId && tripId === current.tripId) {
+          setBusPath([[lat, lng]]);
+  
+          try{
+       //start status bus on route    
+            // Check if bus is near the route polyline
+      const busPoint = turf.point([lng, lat]); // GeoJSON uses [lng, lat]
+      const routeLine = turf.lineString(
+        current.selectedRouteDetails.map(coord => [coord[1], coord[0]]) // Ensure same format
+      );
+  console.log("sssss : ",routeLine);
+  
+      const distance = turf.pointToLineDistance(busPoint, routeLine, {
+        units: "meters"
       });
-      foundBetween = true;
+  
+      if (distance <= TOLERANCE_METERS) {
+        setOnRouteStatus("On Route ✅");
+      } else {
+        setOnRouteStatus("Off Route ❌");
+      }}catch(e){
+        setOnRouteStatus(`error : ${e}`);
+      }
+  //end status bus on route 
+  //start station status 
+  try{
+  // ---------- STATION STATUS ----------
+  const stations = current.routeStationsSortedByItsLocation || [];
+  let currentIndex = -1;
+  
+  // Check if bus is exactly at a station
+  for (let i = 0; i < stations.length; i++) {
+    const station = stations[i];
+    const dist = haversineDistance(lat, lng, station.lat, station.lng);
+    if (dist <= STATION_TOLERANCE_METERS) {
+      currentIndex = i;
       break;
     }
   }
-
-  if (!foundBetween) {
+  
+  if (currentIndex !== -1) {
     setStationInfo({
-      prev: "Not found",
-      current: "Not found",
-      next: "Not found"
+      prev: stations[currentIndex - 1]?.name || "Not found",
+      current: stations[currentIndex].name,
+      next: stations[currentIndex + 1]?.name || "Not found"
     });
-  }}
-}catch(e){
-  setStationInfo({
-    prev: "",
-    current: "",
-    next: ""
-  });
-}
-//end stations status
+  } else {
+    // Check if between any two stations
+    let foundBetween = false;
+    for (let i = 0; i < stations.length - 1; i++) {
+      const s1 = stations[i];
+      const s2 = stations[i + 1];
+      const d1 = haversineDistance(lat, lng, s1.lat, s1.lng);
+      const d2 = haversineDistance(lat, lng, s2.lat, s2.lng);
+      const total = haversineDistance(s1.lat, s1.lng, s2.lat, s2.lng);
+  
+      if (d1 + d2 - total < STATION_TOLERANCE_METERS) {
+        setStationInfo({
+          prev: s1.name,
+          current: "Between stations",
+          next: s2.name
+        });
+        foundBetween = true;
+        break;
       }
-
-    };
-
-    socketRef.current.on("busLocationUpdate", handleBusUpdate);
-
-    return () => {
-      // Clean up listeners and connection on unmount
-      if (socketRef.current) {
-        socketRef.current.off("busLocationUpdate", handleBusUpdate);
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
-      if(currentTripRef.current){
-        currentTripRef.current ={ routeId: null, tripId: null , selectedRouteDetails:null ,selectedRouteStations:null }
-      }
-    };
-  }, []);
+    }
+  
+    if (!foundBetween) {
+      setStationInfo({
+        prev: "Not found",
+        current: "Not found",
+        next: "Not found"
+      });
+    }}
+  }catch(e){
+    setStationInfo({
+      prev: "",
+      current: "",
+      next: ""
+    });
+  }
+  //end stations status
+        }
+  
+      };
+  
+      socketRef.current.on("busLocationUpdate", handleBusUpdate);
+  
+      return () => {
+        // Clean up listeners and connection on unmount
+        if (socketRef.current) {
+          socketRef.current.off("busLocationUpdate", handleBusUpdate);
+          socketRef.current.disconnect();
+          socketRef.current = null;
+        }
+        if(currentTripRef.current){
+          currentTripRef.current ={ 
+            routeId: null, tripId: null , selectedRouteDetails:null ,
+            selectedRouteStations:null,routeStationsSortedByItsLocation:null }
+        }
+      };
+    }, []);
+  
 
   //get routes [main keys] to select route from dropdown ,
   useEffect(() => {
