@@ -262,60 +262,134 @@ const SwalStyles = createGlobalStyle`
 const BusStatusCard = styled.div`
   background: linear-gradient(135deg, #6e8efb, #a777e3);
   border-radius: 16px;
-  padding: 24px;
+  padding: 1.5rem;
   color: white;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-  font-family: 'Segoe UI', sans-serif;
-  max-width: 400px;
-  margin: 20px auto;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 100%;
+  width: 400px;
+  margin: 1.25rem auto;
+  box-sizing: border-box;
+
+  @media (max-width: 500px) {
+    padding: 1.25rem;
+    border-radius: 14px;
+    width: 95%;
+    margin: 1rem auto;
+  }
+
+  @media (max-width: 400px) {
+    padding: 1rem;
+    border-radius: 12px;
+  }
 `;
 
 const StatusIndicator = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
-  padding-bottom: 15px;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+
+  @media (max-width: 400px) {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+  }
 `;
 
 const StatusText = styled.strong`
-  font-size: 1.2rem;
+  font-size: clamp(1rem, 2vw, 1.2rem);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.05em;
   color: ${props => props.$onRoute ? "#4cff8f" : "#ff6b6b"};
+  font-weight: 600;
+
+  @media (max-width: 400px) {
+    letter-spacing: 0.03em;
+  }
 `;
 
 const StationInfoGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 15px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
   align-items: center;
+
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(3, auto);
+    grid-template-areas:
+      "prev"
+      "current"
+      "next";
+    
+    & > *:nth-child(1) { grid-area: prev; }
+    & > *:nth-child(2) { display: none; } /* Hide arrows */
+    & > *:nth-child(3) { grid-area: current; }
+    & > *:nth-child(4) { display: none; } /* Hide arrows */
+    & > *:nth-child(5) { grid-area: next; }
+  }
 `;
 
 const StationCard = styled.div`
   background: rgba(255, 255, 255, 0.1);
-  padding: 12px;
+  padding: 4px;
   border-radius: 10px;
   text-align: center;
+  transition: transform 0.2s ease;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 600px) {
+    min-height: auto;
+    padding: 0.5rem 0.5rem;
+    margin-bottom: 0.5rem;
+  }
 `;
 
 const StationLabel = styled.p`
-  margin: 0 0 5px 0;
-  font-size: 0.9rem;
+  margin: 0 0 0.5rem 0;
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
   opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+
+  @media (max-width: 400px) {
+    font-size: 0.75rem;
+  }
 `;
 
 const StationName = styled.p`
   margin: 0;
-  font-weight: bold;
-  font-size: 1.1rem;
+  font-weight: 600;
+  font-size: clamp(1rem, 2.5vw, 1.1rem);
+  word-break: break-word;
+  line-height: 1.3;
+
+  @media (max-width: 400px) {
+    font-size: 0.9rem;
+  }
 `;
 
 const RouteArrow = styled.div`
   color: rgba(255, 255, 255, 0.6);
   display: flex;
   justify-content: center;
+  padding: 0 0.5rem;
+
+  @media (max-width: 600px) {
+    display: none;
+  }
 `;
 // Socket connection here wrong becuse its effect by other components 
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
@@ -1612,7 +1686,7 @@ useEffect(() => {
       <AppContainer>
         <Header>
           <Logo src="/logo.png" alt="Company Logo" />
-          <h6>*Our System Is Until Now Has More Than %80 accuracy* </h6>
+          {/*<h6>*Our System Is Until Now Has More Than %80 accuracy* </h6>*/}
         </Header>
         <div style={{ 
   margin: "10px 50px",
@@ -1676,16 +1750,16 @@ useEffect(() => {
   Get My Location
 </button>*/}
   {/* Service indicator */}
-  <div style={{ 
+  {/*<div style={{ 
     textAlign: 'center',
     fontSize: '0.8em',
     color: '#666',
     marginBottom: '5px'
   }}>
     Powered by: {currentService}
-  </div>
+  </div>*/}
 
-  <div style={{ 
+  {/*<div style={{ 
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1732,10 +1806,10 @@ border:"1px solid lightgray",
     >
       {loadingGeocode ? 'Searching...' : 'Search'}
     </button>
-  </div>
+  </div>*/}
 
   {/* Autocomplete suggestions dropdown */}
-  {showSuggestions && suggestions.length > 0 && (
+  { /* showSuggestions && suggestions.length > 0 && (
     <div style={{
       position: 'absolute',
       top: 'calc(100% + 5px)',
@@ -1776,9 +1850,9 @@ border:"1px solid lightgray",
         </div>
       ))}
     </div>
-  )}
+  )*/}
 
-  {errorGeocode && (
+  { /* errorGeocode && (
     <div style={{ 
       color: 'red', 
       fontSize: '0.9em',
@@ -1787,7 +1861,7 @@ border:"1px solid lightgray",
     }}>
       {errorGeocode}
     </div>
-  )}
+  )*/}
 
 <BusStatusCard>
       <StatusIndicator>

@@ -4,86 +4,165 @@ import io from "socket.io-client";
 import Swal from 'sweetalert2'
 import styled, { keyframes,createGlobalStyle } from 'styled-components';
 import { PulseLoader } from 'react-spinners';
-
+import { FaBus, FaPlay, FaStop, FaRoute, FaMapMarkerAlt } from 'react-icons/fa';
+import TripStorageInfoBox from "./utils/TripStorageInfoBox";
 //const socket = io(process.env.REACT_APP_BACKEND_BASEURL);
 
 
-// Styled Components
-const GlobalStyle = createGlobalStyle`
-  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-  
-  body {
-    font-family: 'Poppins', sans-serif;
-    margin: 0;
-    padding: 0;
-    background: #f5f7fa;
+const fadeIn = keyframes`
+  from { 
+    opacity: 0; 
+    transform: translateY(10px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
   }
 `;
-const Logo = styled.img`
-  display: block;
-  margin: 0 auto 1rem;
-  max-width: 150px;
-  height: auto;
-`;
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+// Styled Components
+const GlobalStyle = createGlobalStyle`
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  
+  body {
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: #f8fafc;
+    color: #1e293b;
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
 `;
 
 const Container = styled.div`
-  max-width: 500px;
+  max-width: 480px;
   margin: 2rem auto;
   padding: 2rem;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  animation: ${fadeIn} 0.5s ease-out;
+  border-radius: 14px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  animation: ${fadeIn} 0.4s ease-out;
 `;
 
-const Title = styled.h2`
-  color: #2c3e50;
+const AppHeader = styled.div`
+  text-align: center;
+  margin-bottom: 2rem;
+  border-bottom:4px solid #F5F5F8;
+  padding-bottom:10px;
+`;
+
+const Logo = styled.img`
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  margin-bottom: 0px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.05));
+`;
+
+const Title = styled.h1`
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 1.5rem;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
   font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+`;
+
+const BusIcon = styled.span`
+  font-size: 1.8rem;
+color: #224871;
+`;
+
+const TitleText = styled.span`
+  background: #224871;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+font-size:22px;
+`;
+
+const TripStatus = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 2rem;
+  padding: 12px 16px;
+  background: ${props => props.active ? '#f0fdf4' : '#f8fafc'};
+  border-radius: 1px;
+  border: 1px solid ${props => props.active ? '#dcfce7' : '#e2e8f0'};
+`;
+
+const StatusIndicator = styled.div`
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: ${props => props.active ? '#22c55e' : '#94a3b8'};
+  box-shadow: 0 0 0 4px ${props => props.active ? 'rgba(34, 197, 94, 0.2)' : 'rgba(148, 163, 184, 0.2)'};
+`;
+
+const StatusText = styled.span`
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: ${props => props.active ? '#166534' : '#475569'};
+`;
+
+const FormGroup = styled.div`
+  margin-bottom: 1.5rem;
+`;
+
+const SelectLabel = styled.label`
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #475569;
 `;
 
 const Select = styled.select`
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 3px;
   font-size: 1rem;
-  margin-bottom: 1rem;
-  background-color: #f9f9f9;
-  transition: all 0.3s;
+  background-color: white;
+  transition: all 0.2s;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 1em;
   
   &:focus {
     outline: none;
-    border-color: #3498db;
-    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+    border-color: #818cf8;
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+  }
+  
+  &:disabled {
+    background-color: #f1f5f9;
+    cursor: not-allowed;
   }
 `;
 
-const Button = styled.button`
-  background: ${props => props.primary ? '#3498db' : '#e74c3c'};
-  color: white;
+const BaseButton = styled.button`
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
+  padding: 14px 24px;
+  border-radius: 3px;
   font-size: 1rem;
+  font-weight: 500;
   cursor: pointer;
   width: 100%;
-  transition: all 0.3s;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   
   &:hover {
-    background: ${props => props.primary ? '#2980b9' : '#c0392b'};
-    transform: translateY(-2px);
+    transform: translateY(-1px);
   }
   
   &:active {
@@ -91,42 +170,109 @@ const Button = styled.button`
   }
   
   &:disabled {
-    background: #95a5a6;
+    background: #cbd5e1;
     cursor: not-allowed;
+    transform: none;
   }
 `;
 
+const PrimaryButton = styled(BaseButton)`
+  background: #224871;
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
+  
+  &:hover:not(:disabled) {
+    background: #224871;
+    box-shadow: 0 6px 8px -1px rgba(99, 102, 241, 0.4);
+  }
+`;
+
+const SecondaryButton = styled(BaseButton)`
+  background: white;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  
+  &:hover:not(:disabled) {
+    background: #fef2f2;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  }
+`;
+
+const ButtonIcon = styled.span`
+  font-size: 1.2rem;
+`;
+
 const StatusMessage = styled.div`
-  padding: 1rem;
-  background: #f8f9fa;
-  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+  border-radius:6px;
   text-align: center;
-  margin: 1rem 0;
-  color: #7f8c8d;
+  margin: 1.5rem 0;
+  color: #64748b;
+  font-size: 0.875rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 `;
 
-const TripIndicator = styled.div`
+const ActiveIndicator = styled.div`
+  width: 10px;
   height: 10px;
-  width: 100%;
-  background: ${props => props.active ? 'linear-gradient(90deg, #2ecc71, #27ae60)' : '#ecf0f1'};
-  border-radius: 5px;
-  margin: 1.5rem 0;
-  transition: all 0.5s;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse 1.5s infinite;
+  
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+  }
 `;
 
 
 const DriverTrip = () => {
   const socketRef = useRef(null);
-  const [routes, setRoutes] = useState([]);
-  const [selectedRoute, setSelectedRoute] = useState("");
-  const [tripStarted, setTripStarted] = useState(false);
-  const [tripId, setTripId] = useState(null);
-  const [coordinates, setCoordinates] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+//
+const LOCAL_STORAGE_KEY = "current_trip-driver123";
+
+const getInitialTripState = () => {
+  const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+  if (saved) {
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      console.error("Invalid trip data:", e);
+    }
+  }
+  return {
+    routes:[],
+    tripStarted: false,
+    tripId: null,
+    selectedRoute: null,
+    coordinates: []
+  };
+};
+
+const initialTrip = getInitialTripState();
+const [routes, setRoutes] = useState(initialTrip.routes);
+const [tripStarted, setTripStarted] = useState(initialTrip.tripStarted);
+const [tripId, setTripId] = useState(initialTrip.tripId);
+const [selectedRoute, setSelectedRoute] = useState(initialTrip.selectedRoute);
+const [coordinates, setCoordinates] = useState(initialTrip.coordinates);
+
+//
+const [isEndTripLoading, setIsEndTripLoading] = useState(false);
+const [isStartTripLoading, setIsStartTripLoading] = useState(false);
   const watchIdRef = useRef(null);
   const saveCounterRef = useRef(0);
 
@@ -136,19 +282,65 @@ const DriverTrip = () => {
   const localStorageKey = tripId
     ? `trip-${busId}-${selectedRoute}-${tripId}`
     : null;
-    const showAlert = (status='error',text='Someting Went Wrong.') => {
+    const showAlert = (status = 'error', text = 'Something went wrong.') => {
+      const statusConfig = {
+        error: {
+          iconColor: '#ef4444',
+          background: '#fee2e2',
+          icon: 'error',
+        },
+        success: {
+          iconColor: '#22c55e',
+          background: '#dcfce7',
+          icon: 'success',
+        },
+        warning: {
+          iconColor: '#f59e0b',
+          background: '#fef3c7',
+          icon: 'warning',
+        },
+        info: {
+          iconColor: '#3b82f6',
+          background: '#dbeafe',
+          icon: 'info',
+        },
+      };
+    
+      const config = statusConfig[status] || statusConfig.error;
+    
       Swal.fire({
-        //title: 'Alert',
-        text: text,
-        icon:status,
-        /*showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: 'Yes, delete it!',
+        text,
+        icon: config.icon,
+        background: 'white', // Modern dark background
+        color: '#224871', // Light text
+        iconColor: config.iconColor,
+        showConfirmButton: false,
         position: 'top-end',
-        timer: 1500*/
-      })
-    }
+        width: '400px',
+        backdrop: false,
+        timer: 3000,
+        customClass: {
+          popup: 'animated-alert', // For custom animations
+        },
+        showClass: {
+          popup: `
+            animate__animated 
+            animate__fadeInRight 
+            animate__faster
+          `,
+        },
+        hideClass: {
+          popup: `
+            animate__animated 
+            animate__fadeOutRight 
+            animate__faster
+          `,
+        },
+        buttonsStyling: false,
+        padding: '1.25rem',
+        borderRadius: '12px',
+      });
+    };
   const haversineDistance = (lat1, lon1, lat2, lon2) => {
     const toRad = (value) => (value * Math.PI) / 180;
     const R = 6371000; // meters
@@ -164,6 +356,20 @@ const DriverTrip = () => {
     return R * c;
   };
 
+//start persistance logic
+
+useEffect(() => {
+  const tripData = {
+    routes,
+    tripStarted,
+    tripId,
+    selectedRoute,
+    coordinates
+  };
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(tripData));
+}, [routes,tripStarted, tripId, selectedRoute, coordinates]);
+
+//end persisitance logic
   useEffect(() => {
     let getRoutes = async()=>{
       try{
@@ -227,6 +433,7 @@ const checkGPSStatus = () => {
 
   const startTrip = async () => {
     if (!selectedRoute) return showAlert('warning', 'Please select a route before starting the trip.');
+    setIsStartTripLoading(true)
     try {
       await checkGPSStatus();
       const res = await axios.post(`${backend_baseurl}/api/v1/trips/start`,{ busId, routeId: selectedRoute })
@@ -243,12 +450,14 @@ const checkGPSStatus = () => {
       console.error("Failed to start trip:", error);
       //alert(" error while starting a Trip ",error);
       showAlert('error' ,`Error While Starting A Trip : ${error}`)
+    }finally{
+      setIsStartTripLoading(false)
     }
   };
 
   const endTrip = async () => {
     if (!tripId) return;
-setIsLoading(true)
+setIsEndTripLoading(true)
     const finalCoordinates = [...coordinates];
 
     try {
@@ -271,6 +480,9 @@ setIsLoading(true)
         socketRef.current.disconnect();
         socketRef.current = null;
       }
+      if(LOCAL_STORAGE_KEY){
+        localStorage.removeItem(LOCAL_STORAGE_KEY); 
+      }
       //alert("Trip ended and data saved.");
       showAlert('success' ,`Trip ended Successfully`)
     } catch (e) {
@@ -278,7 +490,7 @@ setIsLoading(true)
        console.log(e);
       showAlert('error' ,`Error ending trip : ${e}`)
     } finally{
-      setIsLoading(false)
+      setIsEndTripLoading(false)
     }
   };
 
@@ -325,11 +537,14 @@ useEffect(() => {
   let consecutiveBadAccuracyCount = 0;
 
   if ("geolocation" in navigator) {
+   
     // Connect to socket
     socketRef.current = io(process.env.REACT_APP_BACKEND_BASEURL);
-
+    console.log("login agin " , socketRef.current);
+    
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
+        console.log("login agin 2 " , watchIdRef.current);
         // Accuracy threshold check (15 meters or better)
         if (pos.coords.accuracy > 15) {
           consecutiveBadAccuracyCount++;
@@ -525,60 +740,99 @@ useEffect(() => {
       }
     };
   }, []);
+ 
   
+
+
+  const [showInfoBox, setShowInfoBox] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const toggleInfoBox = () => {
+    setRefreshKey(prev => prev + 1); // trigger fresh data
+    setShowInfoBox(prev => !prev);
+  };
   return (
     <>
     <GlobalStyle />
     <Container>
-      <Logo src="/logo.png" alt="Company Logo" />
-      <Title>
-        <span role="img" aria-label="bus">🚍</span> DRIVER TRIP APP
-      </Title>
+      <AppHeader>
+        <Logo src="/logo.png" alt="Company Logo" />
+        <Title>
+          <BusIcon><FaBus size={23}/></BusIcon>
+          <TitleText>DRIVER APP</TitleText>
+        </Title>
+      </AppHeader>
       
-      <TripIndicator active={tripStarted} />
+      <TripStatus active={tripStarted}>
+        <StatusIndicator active={tripStarted} />
+        <StatusText>
+          {tripStarted ? 'TRIP IN PROGRESS' : 'TRIP NOT STARTED'}
+        </StatusText>
+      </TripStatus>
       
-      <Select
-        onChange={(e) => setSelectedRoute(e.target.value)}
-        value={selectedRoute}
-        disabled={tripStarted}
-      >
-        <option value="" disabled>
-          Select a Route...
-        </option>
-        {routes.map((route) => (
-          <option key={route._id} value={route._id}>
-            {route.name}
-          </option>
-        ))}
-      </Select>
-
-      {!tripStarted ? (
-        <Button 
-          primary 
-          onClick={startTrip}
-          disabled={!selectedRoute}
+      <FormGroup>
+        <SelectLabel>Select Route</SelectLabel>
+        <Select
+          onChange={(e) => setSelectedRoute(e.target.value)}
+          value={selectedRoute}
+          disabled={tripStarted}
         >
-          Start Trip
-        </Button>
-      ) : isLoading ? (
-        <StatusMessage>
-          <PulseLoader color="#3498db" size={8} />
-          <span>Processing trip completion...</span>
-        </StatusMessage>
-      ) : (
-        <Button onClick={endTrip}>
-          End Current Trip
-        </Button>
-      )}
-      
-      {tripStarted && !isLoading && (
-        <StatusMessage>
-          <span role="img" aria-label="active">🔴</span> 
-          Trip in progress - Tracking location...
-        </StatusMessage>
-      )}
+          <option value="" disabled>
+            Choose a route...
+          </option>
+          {routes?.map((route) => (
+            <option key={route._id} value={route._id}>
+              {route.name}
+            </option>
+          ))}
+        </Select>
+      </FormGroup>
+  
+      {!tripStarted ? (
+  isStartTripLoading ? (
+    <StatusMessage>
+      <PulseLoader color="#6366f1" size={10} />
+      <span>Starting Trip...</span>
+    </StatusMessage>
+  ) : (
+    <PrimaryButton 
+      onClick={startTrip}
+      disabled={!selectedRoute || isStartTripLoading}
+    >
+      <ButtonIcon><FaPlay /></ButtonIcon>
+      Start Trip
+    </PrimaryButton>
+  )
+) : isEndTripLoading ? (
+  <StatusMessage>
+    <PulseLoader color="#6366f1" size={10} />
+    <span>Processing Trip Completion...</span>
+  </StatusMessage>
+) : (
+  <SecondaryButton onClick={endTrip}>
+    <ButtonIcon><FaStop /></ButtonIcon>
+    End Current Trip
+  </SecondaryButton>
+)}
+
+{tripStarted && !isEndTripLoading && !isStartTripLoading && (
+  <StatusMessage>
+    <ActiveIndicator />
+    <span>Tracking location in real-time...</span>
+  </StatusMessage>
+)}
+
+<div style={{ marginTop: "10px" }}>
+      <button onClick={toggleInfoBox} style={{ padding: "10px 16px", background: "white", color: "#224871", border: "1px solid #6C757D", borderRadius: "3px" }}>
+        {showInfoBox ? "Hide Trip Storage Info" : "Show Trip Storage Info"}
+      </button>
+
+      {showInfoBox && <TripStorageInfoBox refreshKey={refreshKey} />}
+    </div>
+
     </Container>
-    </>
+  </>
+  
   );
 };
 
